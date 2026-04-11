@@ -1,0 +1,154 @@
+pages/UserDashboard.jsx
+
+
+
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+import CourseCard from '../components/CourseCard';
+
+export default function UserDashboard() {
+  const { user, hasRole } = useAuth();
+  const [courses, setCourses] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/courses/search'),
+      api.get('/user/enrollments'),
+    ]).then(([cr, er]) => {
+      setCourses(cr.data.slice(0, 6));
+      setEnrollments(er.data);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return (
+    <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '60vh' }}>
+      <div className="text-center">
+        <div className="spinner-border text-primary mb-3"></div>
+        <p className="text-muted">Loading your dashboard…</p>
+      </div>
+    </div>
+  );
+
+  const activeEnrollments = enrollments.filter(e => e.active);
+
+  return (
+    <div>
+      <div className="page-header">
+        <h5 className="mb-0 fw-bold">Dashboard</h5>
+      </div>
+
+      <div className="px-4 pb-4">
+        {/* Hero banner */}
+        <div className="rounded-4 p-4 mb-4 text-white position-relative overflow-hidden"
+             style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%)' }}>
+          <div className="position-absolute"
+               style={{ top: -30, right: -30, width: 160, height: 160,
+                        background: 'rgba(255,255,255,0.07)', borderRadius: '50%' }}></div>
+          <div className="position-absolute"
+               style={{ bottom: -50, right: 80, width: 100, height: 100,
+                        background: 'rgba(255,255,255,0.05)', borderRadius: '50%' }}></div>
+          <div className="row align-items-center">
+            <div className="col-md-8">
+              <h4 className="fw-bold mb-1">Welcome back, {user?.username}! 👋</h4>
+              <p className="mb-3 opacity-80">
+                {activeEnrollments.length > 0
+                  ? `You're enrolled in ${activeEnrollments.length} course(s). Keep learning!`
+                  : 'Start your learning journey today.'}
+              </p>
+              <div className="d-flex flex-wrap gap-2">
+                <Link to="/courses" className="btn btn-light btn-sm fw-semibold px-4">
+                  <i className="bi bi-search me-1"></i> Browse Courses
+                </Link>
+                {!hasRole('ROLE_TRAINER') && (
+                  <Link to="/upgrade"
+                    className="btn btn-sm fw-semibold px-4"
+                    style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}>
+                    <i className="bi bi-award me-1"></i> Become a Trainer
+                  </Link>
+                )}
+              </div>
+            </div>
+            <div className="col-md-4 d-none d-md-flex justify-content-end align-items-center">
+              <i className="bi bi-mortarboard-fill opacity-25" style={{ fontSize: '5rem' }}></i>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="row g-3 mb-4">
+          {[
+            { icon: 'book', label: 'Enrolled', val: activeEnrollments.length, color: '#4f46e5' },
+            { icon: 'check-circle', label: 'Completed', val: enrollments.filter(e => !e.active).length, color: '#10b981' },
+            { icon: 'star', label: 'Courses Available', val: courses.length + '+', color: '#f59e0b' },
+          ].map(s => (
+            <div key={s.label} className="col-sm-4">
+              <div className="card p-3">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="rounded-3 d-flex align-items-center justify-content-center"
+                       style={{ width: 44, height: 44, background: s.color + '18' }}>
+                    <i className={`bi bi-${s.icon}`} style={{ color: s.color, fontSize: '1.2rem' }}></i>
+                  </div>
+                  <div>
+                    <p className="mb-0 fw-bold fs-4">{s.val}</p>
+                    <p className="mb-0 text-muted" style={{ fontSize: '0.8rem' }}>{s.label}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Active enrollments */}
+        {activeEnrollments.length > 0 && (
+          <div className="mb-4">
+            <h6 className="fw-bold mb-3">
+              <i className="bi bi-play-circle-fill text-primary me-2"></i>
+              Continue Learning
+            </h6>
+            <div className="row g-3">
+              {activeEnrollments.slice(0, 3).map(e => (
+                <div key={e.id} className="col-md-4">
+                  <div className="card p-3 h-100"
+                       style={{ borderLeft: '3px solid var(--primary)' }}>
+                    <p className="fw-semibold mb-1 small">{e.course?.title}</p>
+                    <p className="text-muted mb-2" style={{ fontSize: '0.78rem' }}>
+                      {e.course?.skill}
+                    </p>
+                    <div className="progress" style={{ height: 5, borderRadius: 5 }}>
+                      <div className="progress-bar bg-primary" style={{ width: '45%' }}></div>
+                    </div>
+                    <small className="text-muted mt-1">In progress</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recommended courses */}
+        <div>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <h6 className="fw-bold mb-0">
+              <i className="bi bi-stars text-warning me-2"></i>
+              Recommended Courses
+            </h6>
+            <Link to="/courses" className="btn btn-sm btn-outline-primary">
+              View all <i className="bi bi-arrow-right ms-1"></i>
+            </Link>
+          </div>
+          <div className="row g-3">
+            {courses.map(c => (
+              <div key={c.id} className="col-md-4">
+                <CourseCard course={c} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

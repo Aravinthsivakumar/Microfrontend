@@ -1,0 +1,130 @@
+pages/CourseSearch.jsx
+
+
+
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
+import CourseCard from '../components/CourseCard';
+
+const CATEGORIES = ['All','Web Development','Data Science','Cloud Computing',
+                    'Mobile Development','DevOps','Cybersecurity'];
+
+export default function CourseSearch() {
+  const [keyword, setKeyword] = useState('');
+  const [courses, setCourses] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+  const [selectedCat, setSelectedCat] = useState('All');
+  const [loading, setLoading] = useState(false);
+  const [sort, setSort] = useState('default');
+
+  const fetchCourses = async (kw = '') => {
+    setLoading(true);
+    try {
+      const res = await api.get('/courses/search', { params: kw ? { keyword: kw } : {} });
+      setCourses(res.data);
+      applyFilters(res.data, selectedCat, sort);
+    } finally { setLoading(false); }
+  };
+
+  const applyFilters = (data, cat, sortBy) => {
+    let result = cat === 'All' ? data : data.filter(c => c.category === cat);
+    if (sortBy === 'price-asc') result = [...result].sort((a, b) => (a.price||0) - (b.price||0));
+    if (sortBy === 'price-desc') result = [...result].sort((a, b) => (b.price||0) - (a.price||0));
+    setFiltered(result);
+  };
+
+  useEffect(() => { fetchCourses(); }, []);
+  useEffect(() => { applyFilters(courses, selectedCat, sort); }, [selectedCat, sort]);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchCourses(keyword);
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h5 className="mb-0 fw-bold">Browse Courses</h5>
+      </div>
+
+      <div className="px-4 pb-4">
+        {/* Search bar */}
+        <div className="card p-3 mb-4">
+          <form onSubmit={handleSearch}>
+            <div className="row g-2 align-items-end">
+              <div className="col-md-6">
+                <label className="form-label small fw-semibold text-muted">Search</label>
+                <div className="input-group">
+                  <span className="input-group-text bg-light border-end-0">
+                    <i className="bi bi-search text-muted"></i>
+                  </span>
+                  <input className="form-control border-start-0"
+                    placeholder="Search by skill, title, category…"
+                    value={keyword}
+                    onChange={e => setKeyword(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label small fw-semibold text-muted">Sort by</label>
+                <select className="form-select" value={sort} onChange={e => setSort(e.target.value)}>
+                  <option value="default">Default</option>
+                  <option value="price-asc">Price: Low to High</option>
+                  <option value="price-desc">Price: High to Low</option>
+                </select>
+              </div>
+              <div className="col-md-3">
+                <button type="submit" className="btn btn-primary w-100" disabled={loading}>
+                  {loading
+                    ? <span className="spinner-border spinner-border-sm"></span>
+                    : <><i className="bi bi-search me-1"></i>Search</>}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Category pills */}
+        <div className="d-flex flex-wrap gap-2 mb-4">
+          {CATEGORIES.map(cat => (
+            <button key={cat}
+              onClick={() => setSelectedCat(cat)}
+              className={`btn btn-sm ${selectedCat === cat
+                ? 'btn-primary'
+                : 'btn-outline-secondary'}`}
+              style={{ borderRadius: 20 }}>
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Results */}
+        <div className="d-flex align-items-center justify-content-between mb-3">
+          <p className="text-muted mb-0 small">
+            {filtered.length} course{filtered.length !== 1 ? 's' : ''} found
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary mb-3"></div>
+            <p className="text-muted">Searching courses…</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-5">
+            <i className="bi bi-journal-x text-muted" style={{ fontSize: '3rem' }}></i>
+            <p className="text-muted mt-3">No courses found. Try a different search.</p>
+          </div>
+        ) : (
+          <div className="row g-3">
+            {filtered.map(c => (
+              <div key={c.id} className="col-md-4">
+                <CourseCard course={c} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

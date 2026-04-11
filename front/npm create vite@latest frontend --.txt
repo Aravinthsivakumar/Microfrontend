@@ -1,0 +1,33 @@
+npm create vite@latest frontend -- --template react
+cd frontend
+npm install axios react-router-dom bootstrap bootstrap-icons
+
+
+main.jsx
+
+import 'bootstrap/dist/css/bootstrap.min.css';
+import 'bootstrap/dist/js/bootstrap.bundle.min.js';
+import 'bootstrap-icons/font/bootstrap-icons.css';
+
+
+src/
+├── main.jsx
+├── App.jsx
+├── index.css
+├── api/axios.js
+├── context/AuthContext.jsx
+├── components/
+│   ├── Navbar.jsx
+│   ├── ProtectedRoute.jsx
+│   ├── CourseCard.jsx
+│   └── NotificationBell.jsx
+└── pages/
+    ├── Login.jsx
+    ├── Register.jsx
+    ├── UserDashboard.jsx
+    ├── TrainerDashboard.jsx
+    ├── AdminDashboard.jsx
+    ├── CourseSearch.jsx
+    ├── Profile.jsx
+    ├── Notifications.jsx
+    └── UpgradeForm.jsx

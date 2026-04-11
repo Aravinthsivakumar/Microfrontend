@@ -1,0 +1,117 @@
+pages/Notifications.jsx
+
+
+
+
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
+
+const TYPE_META = {
+  REQUEST_SENT:       { icon: 'send',               color: 'primary',  label: 'Request Sent' },
+  REQUEST_ACCEPTED:   { icon: 'check-circle-fill',  color: 'success',  label: 'Request Accepted' },
+  REQUEST_REJECTED:   { icon: 'x-circle-fill',      color: 'danger',   label: 'Request Rejected' },
+  UPGRADE_SUBMITTED:  { icon: 'file-earmark-text',  color: 'info',     label: 'Upgrade Submitted' },
+  UPGRADE_APPROVED:   { icon: 'award-fill',         color: 'success',  label: 'Upgrade Approved' },
+  UPGRADE_REJECTED:   { icon: 'slash-circle-fill',  color: 'danger',   label: 'Upgrade Rejected' },
+  NEW_STUDENT:        { icon: 'person-plus-fill',   color: 'warning',  label: 'New Student' },
+  TRAINER_NOTIFICATION:{ icon: 'megaphone-fill',    color: 'secondary',label: 'Trainer Notice' },
+};
+
+export default function Notifications() {
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    api.get('/user/notifications')
+      .then(r => setNotifs(r.data))
+      .finally(() => setLoading(false));
+    api.put('/user/notifications/read-all').catch(() => {});
+  }, []);
+
+  const filtered = filter === 'unread'
+    ? notifs.filter(n => !n.read)
+    : notifs;
+
+  const unreadCount = notifs.filter(n => !n.read).length;
+
+  return (
+    <div>
+      <div className="page-header d-flex align-items-center justify-content-between">
+        <div>
+          <h5 className="mb-0 fw-bold">Notifications</h5>
+          {unreadCount > 0 && (
+            <small className="text-primary">{unreadCount} unread</small>
+          )}
+        </div>
+        <div className="d-flex gap-2">
+          {['all','unread'].map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-outline-secondary'}`}
+              style={{ borderRadius: 20 }}>
+              {f === 'all' ? `All (${notifs.length})` : `Unread (${unreadCount})`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pb-4">
+        {loading ? (
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary mb-3"></div>
+            <p className="text-muted">Loading notifications…</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-5">
+            <i className="bi bi-bell-slash text-muted" style={{ fontSize: '3rem' }}></i>
+            <p className="text-muted mt-3">
+              {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+            </p>
+          </div>
+        ) : (
+          <div className="d-flex flex-column gap-2">
+            {filtered.map(n => {
+              const meta = TYPE_META[n.type] || { icon: 'bell', color: 'secondary', label: n.type };
+              return (
+                <div key={n.id}
+                  className={`card notif-item ${!n.read ? 'unread' : ''}`}>
+                  <div className="card-body py-3">
+                    <div className="d-flex gap-3 align-items-start">
+                      <div className={`rounded-circle d-flex align-items-center justify-content-center
+                                       flex-shrink-0`}
+                           style={{ width: 42, height: 42,
+                                    background: `var(--bs-${meta.color}-bg-subtle, #f8f9fa)` }}>
+                        <i className={`bi bi-${meta.icon} text-${meta.color} fs-5`}></i>
+                      </div>
+                      <div className="flex-grow-1">
+                        <div className="d-flex align-items-center gap-2 mb-1">
+                          <span className={`badge bg-${meta.color}-subtle text-${meta.color}`}
+                                style={{ fontSize: '0.7rem' }}>
+                            {meta.label}
+                          </span>
+                          {!n.read && (
+                            <span className="badge bg-primary rounded-pill" style={{ fontSize: '0.6rem' }}>
+                              New
+                            </span>
+                          )}
+                        </div>
+                        <p className="mb-1" style={{ fontSize: '0.88rem' }}>{n.message}</p>
+                        <small className="text-muted">
+                          <i className="bi bi-person me-1"></i>
+                          {n.senderName}
+                          <span className="mx-2">·</span>
+                          <i className="bi bi-clock me-1"></i>
+                          {new Date(n.createdAt).toLocaleString()}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
