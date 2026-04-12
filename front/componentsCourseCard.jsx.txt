@@ -1,0 +1,109 @@
+components/CourseCard.jsx
+
+
+
+import { useState } from 'react';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+
+export default function CourseCard({ course, showRequestBtn = true }) {
+  const { user } = useAuth();
+  const [status, setStatus] = useState('idle'); // idle | loading | sent | error
+  const [errMsg, setErrMsg] = useState('');
+
+  const sendRequest = async () => {
+    setStatus('loading');
+    try {
+      await api.post(`/user/course-request/${course.id}`);
+      setStatus('sent');
+    } catch (e) {
+      setStatus('error');
+      setErrMsg(e.response?.data?.error || 'Error sending request');
+    }
+  };
+
+  const categoryColors = {
+    'Web Development': 'primary',
+    'Data Science': 'info',
+    'Cloud Computing': 'warning',
+    'Mobile Development': 'success',
+    'DevOps': 'secondary',
+    'Cybersecurity': 'danger',
+  };
+  const badgeColor = categoryColors[course.category] || 'primary';
+
+  return (
+    <div className="card course-card h-100">
+      <div className="card-header">
+        <div className="d-flex justify-content-between align-items-start mb-2">
+          <span className={`badge bg-${badgeColor} bg-opacity-25 text-${badgeColor}`}
+                style={{ fontSize: '0.72rem' }}>
+            {course.category}
+          </span>
+          <span className="fw-bold fs-5">
+            {course.price ? `₹${Number(course.price).toLocaleString()}` : 'Free'}
+          </span>
+        </div>
+        <h6 className="mb-0 fw-semibold">{course.title}</h6>
+        <small className="opacity-75">by {course.trainerName}</small>
+      </div>
+
+      <div className="card-body d-flex flex-column">
+        {course.description && (
+          <p className="text-muted small mb-3"
+             style={{ overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {course.description}
+          </p>
+        )}
+
+        <div className="row g-2 mb-3">
+          {[
+            { icon: 'clock', label: course.duration },
+            { icon: 'calendar3', label: course.timing },
+            { icon: 'geo-alt', label: course.location },
+            { icon: 'tools', label: course.skill },
+          ].map(({ icon, label }) => label && (
+            <div key={icon} className="col-6">
+              <span className="d-flex align-items-center gap-1 text-muted" style={{ fontSize: '0.8rem' }}>
+                <i className={`bi bi-${icon} text-primary`}></i>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {label}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {course.topics && (
+          <div className="mb-3">
+            <small className="text-muted">
+              <i className="bi bi-list-ul me-1"></i>
+              {course.topics.length > 60 ? course.topics.slice(0,60)+'…' : course.topics}
+            </small>
+          </div>
+        )}
+
+        {showRequestBtn && user && (
+          <div className="mt-auto">
+            {status === 'sent' ? (
+              <div className="alert alert-success py-2 mb-0 text-center small">
+                <i className="bi bi-check-circle me-1"></i> Request sent!
+              </div>
+            ) : status === 'error' ? (
+              <div className="alert alert-danger py-2 mb-0 text-center small">{errMsg}</div>
+            ) : (
+              <button onClick={sendRequest}
+                disabled={status === 'loading'}
+                className="btn btn-primary w-100">
+                {status === 'loading'
+                  ? <><span className="spinner-border spinner-border-sm me-2"></span>Sending…</>
+                  : <><i className="bi bi-send me-2"></i>Send Request</>}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

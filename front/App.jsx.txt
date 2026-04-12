@@ -1,0 +1,79 @@
+App.jsx
+
+
+
+
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import UserDashboard from './pages/UserDashboard';
+import TrainerDashboard from './pages/TrainerDashboard';
+import AdminDashboard from './pages/AdminDashboard';
+import CourseSearch from './pages/CourseSearch';
+import Profile from './pages/Profile';
+import Notifications from './pages/Notifications';
+import UpgradeForm from './pages/UpgradeForm';
+
+function AppLayout({ children }) {
+  return (
+    <div className="app-wrapper">
+      <Navbar />
+      <main className="main-content">{children}</main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes (no sidebar) */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Protected routes (with sidebar) */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <AppLayout><UserDashboard /></AppLayout>
+            </ProtectedRoute>
+          }/>
+          <Route path="/courses" element={
+            <ProtectedRoute>
+              <AppLayout><CourseSearch /></AppLayout>
+            </ProtectedRoute>
+          }/>
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <AppLayout><Profile /></AppLayout>
+            </ProtectedRoute>
+          }/>
+          <Route path="/notifications" element={
+            <ProtectedRoute>
+              <AppLayout><Notifications /></AppLayout>
+            </ProtectedRoute>
+          }/>
+          <Route path="/upgrade" element={
+            <ProtectedRoute>
+              <AppLayout><UpgradeForm /></AppLayout>
+            </ProtectedRoute>
+          }/>
+          <Route path="/trainer" element={
+            <ProtectedRoute role="ROLE_TRAINER">
+              <AppLayout><TrainerDashboard /></AppLayout>
+            </ProtectedRoute>
+          }/>
+          <Route path="/admin" element={
+            <ProtectedRoute role="ROLE_ADMIN">
+              <AppLayout><AdminDashboard /></AppLayout>
+            </ProtectedRoute>
+          }/>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}

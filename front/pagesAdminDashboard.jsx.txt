@@ -1,0 +1,335 @@
+pages/AdminDashboard.jsx
+
+
+
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState({});
+  const [requests, setRequests] = useState([]);
+  const [feedback, setFeedback] = useState([]);
+  const [tab, setTab] = useState('overview');
+  const [rejectReasons, setRejectReasons] = useState({});
+  const [msg, setMsg] = useState({ text:'', type:'' });
+  const [selectedReq, setSelectedReq] = useState(null);
+
+  const showMsg = (text, type = 'success') => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg({ text:'', type:'' }), 3000);
+  };
+
+  const load = () => {
+    api.get('/admin/dashboard').then(r => setStats(r.data));
+    api.get('/admin/trainer-requests').then(r => setRequests(r.data));
+    api.get('/admin/feedback').then(r => setFeedback(r.data));
+  };
+
+  useEffect(load, []);
+
+  const approve = async (id) => {
+    try {
+      await api.put(`/admin/trainer-requests/${id}/approve`);
+      showMsg('Trainer approved successfully!');
+      load();
+    } catch { showMsg('Failed to approve', 'danger'); }
+  };
+
+  const reject = async (id) => {
+    const reason = rejectReasons[id]?.trim();
+    if (!reason) { showMsg('Please provide a rejection reason', 'warning'); return; }
+    try {
+      await api.put(`/admin/trainer-requests/${id}/reject`, { reason });
+      showMsg('Request rejected.');
+      load();
+    } catch { showMsg('Failed to reject', 'danger'); }
+  };
+
+  const deleteFeedback = async (id) => {
+    if (!confirm('Delete this feedback?')) return;
+    try {
+      await api.delete(`/admin/feedback/${id}`);
+      setFeedback(fb => fb.filter(f => f.id !== id));
+      showMsg('Feedback deleted.');
+    } catch { showMsg('Failed to delete', 'danger'); }
+  };
+
+  const statCards = [
+    { label: 'Total Users', val: stats.totalUsers, icon: 'people-fill', color: '#4f46e5', bg: '#eef2ff' },
+    { label: 'Total Trainers', val: stats.totalTrainers, icon: 'person-workspace', color: '#7c3aed', bg: '#f5f3ff' },
+    { label: 'Total Courses', val: stats.totalCourses, icon: 'journal-bookmark-fill', color: '#0891b2', bg: '#ecfeff' },
+    { label: 'Enrollments', val: stats.totalEnrollments, icon: 'mortarboard-fill', color: '#059669', bg: '#ecfdf5' },
+    { label: 'Feedback', val: stats.totalFeedback, icon: 'chat-heart-fill', color: '#d97706', bg: '#fffbeb' },
+  ];
+
+  return (
+    <div>
+      <div className="page-header d-flex align-items-center justify-content-between">
+        <div>
+          <h5 className="mb-0 fw-bold">Admin Dashboard</h5>
+          <small className="text-muted">Platform overview & management</small>
+        </div>
+        <span className="badge bg-danger-subtle text-danger px-3 py-2">
+          <i className="bi bi-shield-check me-1"></i>Admin
+        </span>
+      </div>
+
+      <div className="px-4 pb-4">
+        {msg.text && (
+          <div className={`alert alert-${msg.type} d-flex align-items-center gap-2 py-2 mb-3`}>
+            <i className={`bi bi-${msg.type === 'success' ? 'check-circle-fill'
+                                 : msg.type === 'warning' ? 'exclamation-triangle-fill'
+                                 : 'exclamation-circle-fill'}`}></i>
+            {msg.text}
+          </div>
+        )}
+
+        {/* Stat cards */}
+        <div className="row g-3 mb-4">
+          {statCards.map(s => (
+            <div key={s.label} className="col-6 col-md">
+              <div className="card p-3 h-100">
+                <div className="rounded-3 d-flex align-items-center justify-content-center mb-2"
+                     style={{ width: 44, height: 44, background: s.bg }}>
+                  <i className={`bi bi-${s.icon}`} style={{ color: s.color, fontSize: '1.25rem' }}></i>
+                </div>
+                <p className="mb-0 fw-bold fs-4">{s.val ?? '…'}</p>
+                <p className="mb-0 text-muted" style={{ fontSize: '0.78rem' }}>{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <ul className="nav nav-pills mb-4">
+          {[
+            ['overview', 'Overview'],
+            ['trainer-requests', 'Trainer Requests'],
+            ['feedback', 'Feedback'],
+          ].map(([k, l]) => (
+            <li key={k} className="nav-item">
+              <button className={`nav-link ${tab === k ? 'active' : ''}`}
+                onClick={() => setTab(k)}>
+                {l}
+                {k === 'trainer-requests' && requests.filter(r => r.approvalStatus === 'PENDING').length > 0 && (
+                  <span className="badge bg-warning text-dark ms-2 rounded-pill"
+                        style={{ fontSize: '0.7rem' }}>
+                    {requests.filter(r => r.approvalStatus === 'PENDING').length}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {/* Overview tab */}
+        {tab === 'overview' && (
+          <div className="row g-4">
+            <div className="col-md-6">
+              <div className="card h-100">
+                <div className="card-body">
+                  <h6 className="fw-bold mb-3">
+                    <i className="bi bi-activity me-2 text-primary"></i>Quick Overview
+                  </h6>
+                  {[
+                    ['Total registered users', stats.totalUsers, 'person'],
+                    ['Active trainers', stats.totalTrainers, 'person-workspace'],
+                    ['Published courses', stats.totalCourses, 'journal-bookmark'],
+                    ['Course enrollments', stats.totalEnrollments, 'mortarboard'],
+                    ['User feedback', stats.totalFeedback, 'chat-square-text'],
+                  ].map(([label, val, icon]) => (
+                    <div key={label} className="d-flex align-items-center justify-content-between
+                                                 py-2 border-bottom">
+                      <span className="d-flex align-items-center gap-2 text-muted small">
+                        <i className={`bi bi-${icon} text-primary`}></i> {label}
+                      </span>
+                      <span className="fw-bold">{val ?? '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6">
+              <div className="card h-100">
+                <div className="card-body">
+                  <h6 className="fw-bold mb-3">
+                    <i className="bi bi-clock-history me-2 text-warning"></i>
+                    Pending Actions
+                  </h6>
+                  <div className="d-flex flex-column gap-2">
+                    {requests.filter(r => r.approvalStatus === 'PENDING').length > 0 ? (
+                      requests.filter(r => r.approvalStatus === 'PENDING').slice(0, 4).map(r => (
+                        <div key={r.id} className="d-flex align-items-center justify-content-between
+                                                    p-2 rounded-3" style={{ background: '#fffbeb' }}>
+                          <div className="d-flex align-items-center gap-2">
+                            <i className="bi bi-person-workspace text-warning"></i>
+                            <div>
+                              <p className="mb-0 small fw-semibold">{r.user?.username}</p>
+                              <p className="mb-0 text-muted" style={{ fontSize: '0.75rem' }}>
+                                Trainer upgrade request
+                              </p>
+                            </div>
+                          </div>
+                          <button className="btn btn-sm btn-warning text-white"
+                            onClick={() => { setTab('trainer-requests'); }}>
+                            Review
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-3 text-muted">
+                        <i className="bi bi-check-all fs-3 text-success d-block mb-2"></i>
+                        All caught up! No pending actions.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trainer Requests tab */}
+        {tab === 'trainer-requests' && (
+          <div className="d-flex flex-column gap-3">
+            {requests.length === 0 ? (
+              <div className="text-center py-5">
+                <i className="bi bi-person-check text-muted" style={{ fontSize: '3rem' }}></i>
+                <p className="text-muted mt-3">No trainer upgrade requests</p>
+              </div>
+            ) : requests.map(r => (
+              <div key={r.id} className="card">
+                <div className="card-body">
+                  <div className="row align-items-start">
+                    <div className="col-md-7">
+                      <div className="d-flex align-items-center gap-3 mb-3">
+                        <div className="rounded-circle d-flex align-items-center justify-content-center"
+                             style={{ width: 50, height: 50, background: '#eef2ff',
+                                      color: '#4f46e5', fontWeight: 700, fontSize: '1.1rem' }}>
+                          {r.user?.username?.slice(0,2).toUpperCase()}
+                        </div>
+                        <div>
+                          <h6 className="mb-0 fw-bold">{r.user?.username}</h6>
+                          <small className="text-muted">{r.user?.email}</small>
+                        </div>
+                        <span className={`badge ms-auto ${
+                          r.approvalStatus === 'PENDING' ? 'bg-warning text-dark'
+                          : r.approvalStatus === 'APPROVED' ? 'bg-success'
+                          : 'bg-danger'}`}>
+                          {r.approvalStatus}
+                        </span>
+                      </div>
+                      <div className="row g-2 small">
+                        <div className="col-6">
+                          <span className="text-muted">Skills</span>
+                          <p className="mb-0 fw-semibold">{r.skills}</p>
+                        </div>
+                        <div className="col-6">
+                          <span className="text-muted">Category</span>
+                          <p className="mb-0 fw-semibold">{r.category}</p>
+                        </div>
+                        <div className="col-6">
+                          <span className="text-muted">Experience</span>
+                          <p className="mb-0 fw-semibold">{r.experience} years</p>
+                        </div>
+                        <div className="col-6">
+                          <span className="text-muted">Certificate</span>
+                          <p className="mb-0">
+                            {r.certificatePath
+                              ? <a href={r.certificatePath} target="_blank" rel="noreferrer"
+                                   className="text-primary text-decoration-none fw-semibold">
+                                  <i className="bi bi-file-earmark-check me-1"></i>View
+                                </a>
+                              : <span className="text-muted">Not uploaded</span>}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {r.approvalStatus === 'PENDING' && (
+                      <div className="col-md-5 mt-3 mt-md-0">
+                        <label className="form-label small fw-semibold text-muted">
+                          Rejection reason (required to reject)
+                        </label>
+                        <textarea className="form-control form-control-sm mb-2" rows={2}
+                          placeholder="Explain reason for rejection…"
+                          value={rejectReasons[r.id] || ''}
+                          onChange={e => setRejectReasons(prev => ({
+                            ...prev, [r.id]: e.target.value
+                          }))}
+                        ></textarea>
+                        <div className="d-flex gap-2">
+                          <button className="btn btn-success flex-fill btn-sm"
+                            onClick={() => approve(r.id)}>
+                            <i className="bi bi-check-lg me-1"></i>Approve
+                          </button>
+                          <button className="btn btn-outline-danger flex-fill btn-sm"
+                            onClick={() => reject(r.id)}>
+                            <i className="bi bi-x-lg me-1"></i>Reject
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {r.approvalStatus === 'REJECTED' && r.rejectionReason && (
+                      <div className="col-md-5 mt-3 mt-md-0">
+                        <div className="alert alert-danger py-2 small">
+                          <strong>Rejection reason:</strong> {r.rejectionReason}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Feedback tab */}
+        {tab === 'feedback' && (
+          <div>
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <h6 className="fw-bold mb-0">All Feedback ({feedback.length})</h6>
+            </div>
+            {feedback.length === 0 ? (
+              <div className="text-center py-5">
+                <i className="bi bi-chat-square text-muted" style={{ fontSize: '3rem' }}></i>
+                <p className="text-muted mt-3">No feedback submitted yet</p>
+              </div>
+            ) : (
+              <div className="row g-3">
+                {feedback.map(f => (
+                  <div key={f.id} className="col-md-6">
+                    <div className="card h-100">
+                      <div className="card-body">
+                        <div className="d-flex justify-content-between align-items-start mb-2">
+                          <div>
+                            <p className="fw-semibold mb-0 small">{f.user?.username}</p>
+                            <small className="text-muted">{f.course?.title}</small>
+                          </div>
+                          <button className="btn btn-sm btn-outline-danger"
+                            onClick={() => deleteFeedback(f.id)}>
+                            <i className="bi bi-trash"></i>
+                          </button>
+                        </div>
+                        <div className="mb-2" style={{ color: '#f59e0b' }}>
+                          {'★'.repeat(f.rating)}
+                          <span style={{ color: '#e2e8f0' }}>{'★'.repeat(5 - f.rating)}</span>
+                          <small className="text-muted ms-1">({f.rating}/5)</small>
+                        </div>
+                        <p className="text-muted small mb-0"
+                           style={{ fontStyle: 'italic' }}>"{f.comment}"</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+

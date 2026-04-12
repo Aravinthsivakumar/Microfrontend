@@ -1,0 +1,214 @@
+pages/Profile.jsx
+
+
+
+
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+
+export default function Profile() {
+  const { user, hasRole } = useAuth();
+  const [profile, setProfile] = useState(null);
+  const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
+  const [msg, setMsg] = useState({ text: '', type: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/user/profile').then(r => {
+      setProfile(r.data);
+      setUsername(r.data.username);
+      setPhone(r.data.phone || '');
+    });
+  }, []);
+
+  const showMsg = (text, type = 'success') => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg({ text: '', type: '' }), 3000);
+  };
+
+  const saveUsername = async () => {
+    setSaving(true);
+    try {
+      await api.put('/user/profile/username', { username });
+      showMsg('Username updated successfully!');
+    } catch (e) {
+      showMsg(e.response?.data?.error || 'Failed to update', 'danger');
+    } finally { setSaving(false); }
+  };
+
+  const savePhone = async () => {
+    setSaving(true);
+    try {
+      await api.put('/user/profile/phone', { phone });
+      showMsg('Phone number updated!');
+    } catch (e) {
+      showMsg(e.response?.data?.error || 'Failed to update', 'danger');
+    } finally { setSaving(false); }
+  };
+
+  const roleColors = {
+    'ROLE_USER': 'primary',
+    'ROLE_TRAINER': 'success',
+    'ROLE_ADMIN': 'danger',
+  };
+  const roleLabels = {
+    'ROLE_USER': 'User',
+    'ROLE_TRAINER': 'Trainer',
+    'ROLE_ADMIN': 'Admin',
+  };
+
+  if (!profile) return (
+    <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
+      <div className="spinner-border text-primary"></div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <h5 className="mb-0 fw-bold">My Profile</h5>
+      </div>
+
+      <div className="px-4 pb-4">
+        <div className="row g-4">
+          {/* Left: Avatar card */}
+          <div className="col-md-4">
+            <div className="card text-center p-4">
+              <div className="mx-auto mb-3 rounded-circle d-flex align-items-center
+                              justify-content-center fw-bold text-white"
+                   style={{ width: 90, height: 90, fontSize: '2rem',
+                            background: 'linear-gradient(135deg,#4f46e5,#7c3aed)' }}>
+                {profile.username?.slice(0,2).toUpperCase()}
+              </div>
+              <h5 className="fw-bold mb-1">{profile.username}</h5>
+              <p className="text-muted small mb-3">{profile.email}</p>
+              <div className="d-flex flex-wrap justify-content-center gap-1 mb-3">
+                {profile.roles?.map(r => (
+                  <span key={r} className={`badge bg-${roleColors[r] || 'secondary'}-subtle
+                                            text-${roleColors[r] || 'secondary'} role-badge`}>
+                    {roleLabels[r] || r}
+                  </span>
+                ))}
+              </div>
+              <div className="border-top pt-3">
+                <div className="d-flex align-items-center gap-2 justify-content-center text-muted small">
+                  <i className="bi bi-shield-check text-success"></i>
+                  Account active
+                </div>
+              </div>
+            </div>
+
+            {!hasRole('ROLE_TRAINER') && (
+              <Link to="/upgrade"
+                className="btn btn-primary w-100 mt-3 py-2">
+                <i className="bi bi-award-fill me-2"></i>
+                Upgrade to Trainer
+              </Link>
+            )}
+          </div>
+
+          {/* Right: Edit forms */}
+          <div className="col-md-8">
+            {msg.text && (
+              <div className={`alert alert-${msg.type} d-flex align-items-center gap-2 py-2 mb-4`}
+                   style={{ borderRadius: 10 }}>
+                <i className={`bi bi-${msg.type === 'success' ? 'check-circle-fill' : 'exclamation-circle-fill'}`}></i>
+                {msg.text}
+              </div>
+            )}
+
+            <div className="card mb-3">
+              <div className="card-body">
+                <h6 className="fw-bold mb-3">
+                  <i className="bi bi-person-gear me-2 text-primary"></i>
+                  Account Information
+                </h6>
+                <div className="mb-3">
+                  <label className="form-label small fw-semibold text-muted">Username</label>
+                  <div className="input-group">
+                    <input type="text" className="form-control"
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      placeholder="Your username" />
+                    <button className="btn btn-primary" onClick={saveUsername} disabled={saving}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="form-label small fw-semibold text-muted">Email address</label>
+                  <div className="input-group">
+                    <span className="input-group-text bg-light">
+                      <i className="bi bi-lock text-muted"></i>
+                    </span>
+                    <input type="email" className="form-control bg-light text-muted"
+                      value={profile.email} disabled />
+                  </div>
+                  <small className="text-muted">Email cannot be changed.</small>
+                </div>
+              </div>
+            </div>
+
+            <div className="card mb-3">
+              <div className="card-body">
+                <h6 className="fw-bold mb-3">
+                  <i className="bi bi-telephone me-2 text-primary"></i>
+                  Contact Details
+                </h6>
+                <label className="form-label small fw-semibold text-muted">Phone Number</label>
+                <div className="input-group">
+                  <span className="input-group-text bg-light">
+                    <i className="bi bi-telephone text-muted"></i>
+                  </span>
+                  <input type="tel" className="form-control"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="+91 9876543210" />
+                  <button className="btn btn-primary" onClick={savePhone} disabled={saving}>
+                    Save
+                  </button>
+                </div>
+                {hasRole('ROLE_TRAINER') && (
+                  <div className="alert alert-warning py-2 mt-2 small d-flex align-items-center gap-2">
+                    <i className="bi bi-exclamation-triangle-fill"></i>
+                    As a trainer, your phone is shared with accepted students. Keep it updated.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-body">
+                <h6 className="fw-bold mb-2">
+                  <i className="bi bi-shield me-2 text-primary"></i>
+                  Account Roles
+                </h6>
+                {profile.roles?.map(r => (
+                  <div key={r} className="d-flex align-items-center gap-3 p-2 rounded-3"
+                       style={{ background: '#f8fafc' }}>
+                    <i className={`bi bi-${r === 'ROLE_ADMIN' ? 'shield-fill-check' :
+                                             r === 'ROLE_TRAINER' ? 'person-workspace' : 'person'}
+                                  text-${roleColors[r] || 'secondary'} fs-4`}></i>
+                    <div>
+                      <p className="mb-0 fw-semibold small">{roleLabels[r]}</p>
+                      <p className="mb-0 text-muted" style={{ fontSize: '0.75rem' }}>
+                        {r === 'ROLE_ADMIN' ? 'Full platform administration'
+                          : r === 'ROLE_TRAINER' ? 'Manage courses and students'
+                          : 'Browse and enroll in courses'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+

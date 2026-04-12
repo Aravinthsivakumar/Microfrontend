@@ -1,0 +1,39 @@
+components/NotificationBell.jsx
+
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
+
+export default function NotificationBell({ inline = false }) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const fetch = () =>
+      api.get('/user/notifications/unread-count')
+        .then(r => setCount(r.data.count || 0))
+        .catch(() => {});
+    fetch();
+    const t = setInterval(fetch, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (inline) {
+    return count > 0 ? (
+      <span className="badge rounded-pill"
+            style={{ background: 'var(--danger)', fontSize: '0.65rem' }}>
+        {count > 9 ? '9+' : count}
+      </span>
+    ) : null;
+  }
+
+  return (
+    <span className="position-relative">
+      <i className="bi bi-bell fs-5"></i>
+      {count > 0 && (
+        <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+              style={{ fontSize: '0.6rem' }}>
+          {count > 9 ? '9+' : count}
+        </span>
+      )}
+    </span>
+  );
+}
