@@ -1,0 +1,3108 @@
+import axios from 'axios'
+
+const axiosInstance = axios.create({
+  baseURL: '/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Request interceptor — attach token
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const stored = localStorage.getItem('user')
+    if (stored) {
+      const { token } = JSON.parse(stored)
+      if (token) config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+// Response interceptor — handle 401
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export default axiosInstance
+
+
+import axiosInstance from './axiosInstance'
+
+// ─── AUTH ───────────────────────────────────────────────────────────────────
+export const authAPI = {
+  login: (data) => axiosInstance.post('/auth/login', data),
+  register: (data) => axiosInstance.post('/auth/register', data),
+}
+
+// ─── COURSES (public) ────────────────────────────────────────────────────────
+export const courseAPI = {
+  search: (keyword = '') => axiosInstance.get(`/courses/search?keyword=${keyword}`),
+  getById: (id) => axiosInstance.get(`/courses/${id}`),
+  getCourseFeedback: (id) => axiosInstance.get(`/courses/${id}/feedback`),
+}
+
+// ─── USER ────────────────────────────────────────────────────────────────────
+export const userAPI = {
+  getProfile: () => axiosInstance.get('/user/profile'),
+  updateProfile: (data) => axiosInstance.put('/user/profile', data),
+  requestTrainerUpgrade: (formData) =>
+    axiosInstance.post('/user/trainer-upgrade', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  sendCourseRequest: (data) => axiosInstance.post('/user/course-request', data),
+  getMyCourseRequests: () => axiosInstance.get('/user/course-requests'),
+  getEnrolledCourses: () => axiosInstance.get('/user/enrollments'),
+  submitFeedback: (data) => axiosInstance.post('/user/feedback', data),
+  getNotifications: () => axiosInstance.get('/user/notifications'),
+  markNotificationRead: (id) => axiosInstance.put(`/user/notifications/${id}/read`),
+  markAllRead: () => axiosInstance.put('/user/notifications/read-all'),
+}
+
+// ─── TRAINER ─────────────────────────────────────────────────────────────────
+export const trainerAPI = {
+  createCourse: (data) => axiosInstance.post('/trainer/courses', data),
+  updateCourse: (id, data) => axiosInstance.put(`/trainer/courses/${id}`, data),
+  getMyCourses: () => axiosInstance.get('/trainer/courses'),
+  getCourseRequests: () => axiosInstance.get('/trainer/requests'),
+  decideCourseRequest: (id, data) => axiosInstance.put(`/trainer/requests/${id}/decision`, data),
+  getStudents: () => axiosInstance.get('/trainer/students'),
+  getCourseEnrollments: (courseId) => axiosInstance.get(`/trainer/courses/${courseId}/enrollments`),
+}
+
+// ─── ADMIN ───────────────────────────────────────────────────────────────────
+export const adminAPI = {
+  getAllTrainerRequests: () => axiosInstance.get('/admin/trainer-requests'),
+  getPendingTrainerRequests: () => axiosInstance.get('/admin/trainer-requests/pending'),
+  decideTrainerRequest: (id, data) => axiosInstance.put(`/admin/trainer-requests/${id}/decision`, data),
+  getAllUsers: () => axiosInstance.get('/admin/users'),
+  getAllCourses: () => axiosInstance.get('/admin/courses'),
+  getAllFeedback: () => axiosInstance.get('/admin/feedback'),
+  deleteFeedback: (id) => axiosInstance.delete(`/admin/feedback/${id}`),
+  getReport: () => axiosInstance.get('/admin/reports'),
+}
+
+
+import Sidebar from './Sidebar'
+import Topbar from './Topbar'
+
+const Layout = ({ children, title }) => {
+  return (
+    <div>
+      <Sidebar />
+      <div className="main-content">
+        <Topbar title={title} />
+        <div className="p-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default Layout
+
+
+
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext"; // ✅ FIXED
+
+const ProtectedRoute = ({ children, roles }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div
+        className="d-flex justify-content-center align-items-center"
+        style={{ minHeight: "100vh" }}
+      >
+        <div className="spinner-border text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (roles && !roles.some((r) => user.roles?.includes(r))) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  return children;
+};
+
+export default ProtectedRoute;
+
+
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+
+const adminLinks = [
+  { to: '/admin/dashboard', icon: 'bi-speedometer2', label: 'Dashboard' },
+  { to: '/admin/users', icon: 'bi-people', label: 'Users' },
+  { to: '/admin/courses', icon: 'bi-collection', label: 'Courses' },
+  { to: '/admin/trainer-requests', icon: 'bi-person-check', label: 'Trainer Requests' },
+  { to: '/admin/feedback', icon: 'bi-chat-dots', label: 'Feedback' },
+  { to: '/admin/reports', icon: 'bi-bar-chart-line', label: 'Reports' },
+]
+
+const trainerLinks = [
+  { to: '/trainer/dashboard', icon: 'bi-speedometer2', label: 'Dashboard' },
+  { to: '/trainer/courses', icon: 'bi-collection', label: 'My Courses' },
+  { to: '/trainer/requests', icon: 'bi-inbox', label: 'Course Requests' },
+  { to: '/trainer/students', icon: 'bi-people', label: 'Students' },
+]
+
+const userLinks = [
+  { to: '/user/dashboard', icon: 'bi-speedometer2', label: 'Dashboard' },
+  { to: '/user/courses', icon: 'bi-search', label: 'Browse Courses' },
+  { to: '/user/enrollments', icon: 'bi-journal-check', label: 'My Enrollments' },
+  { to: '/user/requests', icon: 'bi-send', label: 'My Requests' },
+  { to: '/user/notifications', icon: 'bi-bell', label: 'Notifications' },
+  { to: '/user/profile', icon: 'bi-person-circle', label: 'Profile' },
+]
+
+const Sidebar = () => {
+  const { user, logout, isAdmin, isTrainer } = useAuth()
+  const navigate = useNavigate()
+
+  const links = isAdmin() ? adminLinks : isTrainer() ? trainerLinks : userLinks
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  return (
+    <div className="sidebar d-flex flex-column">
+      <div className="sidebar-brand">
+        <div className="d-flex align-items-center gap-2">
+          <div style={{
+            width: 36, height: 36, borderRadius: '0.6rem',
+            background: 'linear-gradient(135deg,#818cf8,#06b6d4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <i className="bi bi-mortarboard-fill text-white" style={{ fontSize: '1rem' }} />
+          </div>
+          <div>
+            <div className="text-white fw-bold" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>SkillBridge</div>
+            <div className="text-white-50" style={{ fontSize: '0.7rem' }}>
+              {isAdmin() ? 'Admin Panel' : isTrainer() ? 'Trainer Panel' : 'Student Panel'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="py-3 flex-grow-1">
+        <div className="px-3 mb-2">
+          <span className="text-white-50" style={{ fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Navigation
+          </span>
+        </div>
+        <ul className="nav flex-column">
+          {links.map((link) => (
+            <li className="nav-item" key={link.to}>
+              <NavLink
+                to={link.to}
+                className={({ isActive }) => `nav-link d-flex align-items-center${isActive ? ' active' : ''}`}
+              >
+                <i className={`bi ${link.icon}`} />
+                {link.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="p-3 border-top" style={{ borderColor: 'rgba(255,255,255,0.1) !important' }}>
+        <div className="d-flex align-items-center gap-2 mb-3">
+          <div style={{
+            width: 34, height: 34, borderRadius: '50%',
+            background: 'linear-gradient(135deg,#818cf8,#06b6d4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', color: '#fff', fontWeight: 700
+          }}>
+            {user?.firstName?.[0]}{user?.lastName?.[0]}
+          </div>
+          <div>
+            <div className="text-white fw-semibold" style={{ fontSize: '0.82rem' }}>
+              {user?.firstName} {user?.lastName}
+            </div>
+            <div className="text-white-50" style={{ fontSize: '0.7rem' }}>{user?.email}</div>
+          </div>
+        </div>
+        <button className="btn btn-sm w-100 text-white" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '0.5rem' }} onClick={handleLogout}>
+          <i className="bi bi-box-arrow-right me-2" />Logout
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default Sidebar
+
+
+import { useAuth } from '../../context/AuthContext'
+
+const Topbar = ({ title }) => {
+  const { user } = useAuth()
+
+  return (
+    <div className="topbar d-flex justify-content-between align-items-center">
+      <h5 className="mb-0 page-title">{title}</h5>
+      <div className="d-flex align-items-center gap-3">
+        <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+          Welcome, <strong>{user?.firstName}</strong>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+export default Topbar
+
+
+export const Spinner = () => (
+  <div className="d-flex justify-content-center align-items-center py-5">
+    <div className="spinner-border text-primary" />
+  </div>
+)
+
+export const Alert = ({ type = 'danger', message }) =>
+  message ? (
+    <div className={`alert alert-${type} d-flex align-items-center gap-2`} role="alert">
+      <i className={`bi ${type === 'danger' ? 'bi-exclamation-triangle' : 'bi-check-circle'}`} />
+      {message}
+    </div>
+  ) : null
+
+export const StatusBadge = ({ status }) => {
+  const map = {
+    PENDING: 'badge-pending',
+    APPROVED: 'badge-approved',
+    REJECTED: 'badge-rejected',
+    ACTIVE: 'badge-active',
+    INACTIVE: 'bg-secondary text-white',
+    ACCEPTED: 'badge-approved',
+    DECLINED: 'badge-rejected',
+  }
+  return (
+    <span className={`badge rounded-pill px-3 py-1 ${map[status] || 'bg-light text-dark'}`} style={{ fontSize: '0.75rem' }}>
+      {status}
+    </span>
+  )
+}
+
+export const StarRating = ({ rating }) => (
+  <span>
+    {[1, 2, 3, 4, 5].map((s) => (
+      <i key={s} className={`bi bi-star${s <= rating ? '-fill' : ''} rating-star`} />
+    ))}
+  </span>
+)
+
+
+import { createContext, useContext, useState, useEffect } from 'react'
+import axiosInstance from '../api/axiosInstance'
+
+const AuthContext = createContext(null)
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('user')
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      setUser(parsed)
+      axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${parsed.token}`
+    }
+    setLoading(false)
+  }, [])
+
+  const login = (userData) => {
+    localStorage.setItem('user', JSON.stringify(userData))
+    axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`
+    setUser(userData)
+  }
+
+  const logout = () => {
+    localStorage.removeItem('user')
+    delete axiosInstance.defaults.headers.common['Authorization']
+    setUser(null)
+  }
+
+  const isAdmin = () => user?.roles?.includes('ROLE_ADMIN')
+  const isTrainer = () => user?.roles?.includes('ROLE_TRAINER')
+  const isUser = () => user?.roles?.includes('ROLE_USER')
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin, isTrainer, isUser }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => useContext(AuthContext)
+
+
+	import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { adminAPI } from '../../api/services'
+import { Spinner, StatusBadge } from '../../components/common/UI'
+
+const AdminCourses = () => {
+  const [courses, setCourses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    adminAPI.getAllCourses()
+      .then(({ data }) => setCourses(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = courses.filter((c) =>
+    c.title?.toLowerCase().includes(search.toLowerCase()) ||
+    c.category?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <Layout title="All Courses">
+      <div className="card table-card">
+        <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
+          <h6 className="fw-bold mb-0">Courses <span className="text-muted fw-normal">({courses.length})</span></h6>
+          <input
+            className="form-control form-control-sm"
+            style={{ width: 220 }}
+            placeholder="Search title or category..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Trainer</th>
+                    <th>Price</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center text-muted py-4">No courses found.</td></tr>
+                  ) : filtered.map((c, i) => (
+                    <tr key={c.id}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td>
+                        <div className="fw-semibold">{c.title}</div>
+                        <div className="text-muted" style={{ fontSize: '0.78rem' }}>{c.description?.substring(0, 60)}...</div>
+                      </td>
+                      <td>
+                        <span className="badge bg-light text-dark">{c.category || '—'}</span>
+                      </td>
+                      <td className="text-muted">{c.trainerName || '—'}</td>
+                      <td className="fw-semibold text-success">
+                        {c.price ? `₹${c.price}` : 'Free'}
+                      </td>
+                      <td><StatusBadge status={c.status || 'ACTIVE'} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default AdminCourses
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { adminAPI } from '../../api/services'
+import { Spinner } from '../../components/common/UI'
+
+const StatCard = ({ icon, label, value, color }) => (
+  <div className="col-sm-6 col-xl-3">
+    <div className="card stat-card p-3">
+      <div className="d-flex align-items-center gap-3">
+        <div className="stat-icon" style={{ background: `${color}20`, color }}>
+          <i className={`bi ${icon}`} />
+        </div>
+        <div>
+          <div className="text-muted" style={{ fontSize: '0.8rem' }}>{label}</div>
+          <div className="fw-bold fs-4">{value ?? '—'}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
+const AdminDashboard = () => {
+  const [report, setReport] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    adminAPI.getReport()
+      .then(({ data }) => setReport(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Layout title="Admin Dashboard">
+      {loading ? <Spinner /> : (
+        <>
+          <div className="row g-3 mb-4">
+            <StatCard icon="bi-people-fill" label="Total Users" value={report?.totalUsers} color="#4f46e5" />
+            <StatCard icon="bi-collection-fill" label="Total Courses" value={report?.totalCourses} color="#06b6d4" />
+            <StatCard icon="bi-person-badge-fill" label="Active Trainers" value={report?.totalTrainers} color="#10b981" />
+            <StatCard icon="bi-journal-check" label="Total Enrollments" value={report?.totalEnrollments} color="#f59e0b" />
+          </div>
+
+          <div className="row g-3">
+            <div className="col-md-6">
+              <div className="card table-card">
+                <div className="card-header bg-white border-0 pt-3 pb-0">
+                  <h6 className="fw-bold mb-0">Platform Overview</h6>
+                </div>
+                <div className="card-body">
+                  <ul className="list-group list-group-flush">
+                    <li className="list-group-item d-flex justify-content-between">
+                      <span className="text-muted">Pending Trainer Requests</span>
+                      <span className="fw-semibold">{report?.pendingTrainerRequests ?? 0}</span>
+                    </li>
+                    <li className="list-group-item d-flex justify-content-between">
+                      <span className="text-muted">Total Feedback</span>
+                      <span className="fw-semibold">{report?.totalFeedback ?? 0}</span>
+                    </li>
+                    <li className="list-group-item d-flex justify-content-between">
+                      <span className="text-muted">Average Rating</span>
+                      <span className="fw-semibold">{report?.averageRating ? report.averageRating.toFixed(1) : '—'} ⭐</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-md-6">
+              <div className="card table-card h-100 p-3">
+                <h6 className="fw-bold mb-3">Quick Actions</h6>
+                <div className="d-grid gap-2">
+                  <a href="/admin/trainer-requests" className="btn btn-outline-primary btn-sm text-start">
+                    <i className="bi bi-person-check me-2" />Review Trainer Requests
+                  </a>
+                  <a href="/admin/users" className="btn btn-outline-secondary btn-sm text-start">
+                    <i className="bi bi-people me-2" />Manage Users
+                  </a>
+                  <a href="/admin/courses" className="btn btn-outline-info btn-sm text-start">
+                    <i className="bi bi-collection me-2" />View All Courses
+                  </a>
+                  <a href="/admin/feedback" className="btn btn-outline-warning btn-sm text-start">
+                    <i className="bi bi-chat-dots me-2" />Moderate Feedback
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </Layout>
+  )
+}
+
+export default AdminDashboard
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { adminAPI } from '../../api/services'
+import { Spinner, Alert, StarRating } from '../../components/common/UI'
+
+const AdminFeedback = () => {
+  const [feedback, setFeedback] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState({ type: '', text: '' })
+  const [deleting, setDeleting] = useState(null)
+
+  const fetchFeedback = () => {
+    setLoading(true)
+    adminAPI.getAllFeedback()
+      .then(({ data }) => setFeedback(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchFeedback() }, [])
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this feedback?')) return
+    setDeleting(id)
+    try {
+      await adminAPI.deleteFeedback(id)
+      setMessage({ type: 'success', text: 'Feedback deleted.' })
+      fetchFeedback()
+    } catch {
+      setMessage({ type: 'danger', text: 'Failed to delete feedback.' })
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  return (
+    <Layout title="Moderate Feedback">
+      <Alert type={message.type} message={message.text} />
+      <div className="card table-card">
+        <div className="card-header bg-white border-0 pt-3">
+          <h6 className="fw-bold mb-0">All Feedback <span className="text-muted fw-normal">({feedback.length})</span></h6>
+        </div>
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Course</th>
+                    <th>Rating</th>
+                    <th>Comment</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedback.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-muted py-4">No feedback yet.</td></tr>
+                  ) : feedback.map((f) => (
+                    <tr key={f.id}>
+                      <td className="fw-semibold">{f.userName || f.userEmail || '—'}</td>
+                      <td className="text-muted">{f.courseTitle || '—'}</td>
+                      <td><StarRating rating={f.rating} /></td>
+                      <td style={{ maxWidth: 260 }}>
+                        <span style={{ fontSize: '0.85rem' }}>{f.comment}</span>
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => handleDelete(f.id)}
+                          disabled={deleting === f.id}
+                        >
+                          {deleting === f.id ? <span className="spinner-border spinner-border-sm" /> : <i className="bi bi-trash" />}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default AdminFeedback
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { adminAPI } from '../../api/services'
+import { Spinner } from '../../components/common/UI'
+
+const MetricRow = ({ label, value, icon, color }) => (
+  <div className="d-flex align-items-center justify-content-between py-3 border-bottom">
+    <div className="d-flex align-items-center gap-3">
+      <div style={{
+        width: 38, height: 38, borderRadius: '0.6rem',
+        background: `${color}20`, color, display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
+        <i className={`bi ${icon}`} />
+      </div>
+      <span className="fw-semibold" style={{ fontSize: '0.9rem' }}>{label}</span>
+    </div>
+    <span className="fw-bold fs-5">{value ?? '—'}</span>
+  </div>
+)
+
+const AdminReports = () => {
+  const [report, setReport] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    adminAPI.getReport()
+      .then(({ data }) => setReport(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Layout title="Platform Reports">
+      {loading ? <Spinner /> : (
+        <div className="row g-4">
+          <div className="col-lg-6">
+            <div className="card table-card p-4">
+              <h6 className="fw-bold mb-3">
+                <i className="bi bi-bar-chart-line me-2 text-primary" />Platform Statistics
+              </h6>
+              <MetricRow label="Total Users" value={report?.totalUsers} icon="bi-people-fill" color="#4f46e5" />
+              <MetricRow label="Total Trainers" value={report?.totalTrainers} icon="bi-person-badge-fill" color="#10b981" />
+              <MetricRow label="Total Courses" value={report?.totalCourses} icon="bi-collection-fill" color="#06b6d4" />
+              <MetricRow label="Total Enrollments" value={report?.totalEnrollments} icon="bi-journal-check" color="#f59e0b" />
+              <MetricRow label="Total Feedback" value={report?.totalFeedback} icon="bi-chat-dots-fill" color="#8b5cf6" />
+            </div>
+          </div>
+          <div className="col-lg-6">
+            <div className="card table-card p-4">
+              <h6 className="fw-bold mb-3">
+                <i className="bi bi-clipboard-data me-2 text-success" />Quality Metrics
+              </h6>
+              <MetricRow label="Pending Trainer Requests" value={report?.pendingTrainerRequests} icon="bi-hourglass-split" color="#f59e0b" />
+              <MetricRow label="Average Course Rating" value={report?.averageRating ? `${report.averageRating.toFixed(2)} ⭐` : '—'} icon="bi-star-fill" color="#f59e0b" />
+              <div className="mt-4 p-3 rounded" style={{ background: '#f0fdf4' }}>
+                <div className="text-success fw-semibold mb-1"><i className="bi bi-info-circle me-1" />Summary</div>
+                <p className="mb-0 text-muted" style={{ fontSize: '0.85rem' }}>
+                  The platform has <strong>{report?.totalUsers}</strong> registered users, <strong>{report?.totalTrainers}</strong> active trainers,
+                  and <strong>{report?.totalCourses}</strong> courses with <strong>{report?.totalEnrollments}</strong> total enrollments.
+                  Average rating across all courses is <strong>{report?.averageRating?.toFixed(2) ?? 'N/A'}</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  )
+}
+
+export default AdminReports
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { adminAPI } from '../../api/services'
+import { Spinner, StatusBadge, Alert } from '../../components/common/UI'
+
+const AdminTrainerRequests = () => {
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(null)
+  const [message, setMessage] = useState({ type: '', text: '' })
+  const [filter, setFilter] = useState('ALL')
+  const [reason, setReason] = useState('')
+  const [selected, setSelected] = useState(null)
+
+  const fetchRequests = () => {
+    setLoading(true)
+    adminAPI.getAllTrainerRequests()
+      .then(({ data }) => setRequests(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchRequests() }, [])
+
+  const decide = async (id, approved) => {
+    setActionLoading(id)
+    setMessage({ type: '', text: '' })
+    try {
+      await adminAPI.decideTrainerRequest(id, { approved, reason })
+      setMessage({ type: 'success', text: `Request ${approved ? 'approved' : 'rejected'} successfully.` })
+      setReason('')
+      setSelected(null)
+      fetchRequests()
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Action failed.' })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const filtered = filter === 'ALL' ? requests : requests.filter((r) => r.status === filter)
+
+  return (
+    <Layout title="Trainer Requests">
+      <Alert type={message.type} message={message.text} />
+
+      <div className="d-flex gap-2 mb-3">
+        {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((f) => (
+          <button
+            key={f}
+            className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setFilter(f)}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      <div className="card table-card">
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Applicant</th>
+                    <th>Specialization</th>
+                    <th>Bio</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-muted py-4">No requests found.</td></tr>
+                  ) : filtered.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <div className="fw-semibold">{r.userName || r.userEmail}</div>
+                        <div className="text-muted" style={{ fontSize: '0.78rem' }}>{r.userEmail}</div>
+                      </td>
+                      <td>{r.specialization || '—'}</td>
+                      <td style={{ maxWidth: 200 }}>
+                        <div className="text-muted" style={{ fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.bio || '—'}
+                        </div>
+                      </td>
+                      <td><StatusBadge status={r.status} /></td>
+                      <td>
+                        {r.status === 'PENDING' && (
+                          <div className="d-flex gap-2">
+                            {selected === r.id ? (
+                              <div className="d-flex gap-2 align-items-center">
+                                <input
+                                  className="form-control form-control-sm"
+                                  style={{ width: 140 }}
+                                  placeholder="Reason (optional)"
+                                  value={reason}
+                                  onChange={(e) => setReason(e.target.value)}
+                                />
+                                <button
+                                  className="btn btn-success btn-sm"
+                                  disabled={actionLoading === r.id}
+                                  onClick={() => decide(r.id, true)}
+                                >
+                                  <i className="bi bi-check-lg" /> Approve
+                                </button>
+                                <button
+                                  className="btn btn-danger btn-sm"
+                                  disabled={actionLoading === r.id}
+                                  onClick={() => decide(r.id, false)}
+                                >
+                                  <i className="bi bi-x-lg" /> Reject
+                                </button>
+                                <button className="btn btn-sm btn-light" onClick={() => setSelected(null)}>Cancel</button>
+                              </div>
+                            ) : (
+                              <button className="btn btn-sm btn-outline-primary" onClick={() => setSelected(r.id)}>
+                                Review
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {r.status !== 'PENDING' && (
+                          <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {r.adminReason || 'No reason given'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default AdminTrainerRequests
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { adminAPI } from '../../api/services'
+import { Spinner, StatusBadge } from '../../components/common/UI'
+
+const AdminUsers = () => {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    adminAPI.getAllUsers()
+      .then(({ data }) => setUsers(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = users.filter(
+    (u) =>
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      `${u.firstName} ${u.lastName}`.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <Layout title="Manage Users">
+      <div className="card table-card">
+        <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
+          <h6 className="fw-bold mb-0">All Users <span className="text-muted fw-normal">({users.length})</span></h6>
+          <input
+            className="form-control form-control-sm"
+            style={{ width: 220 }}
+            placeholder="Search by name or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Roles</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-muted py-4">No users found.</td></tr>
+                  ) : filtered.map((u, i) => (
+                    <tr key={u.id}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td>
+                        <div className="d-flex align-items-center gap-2">
+                          <div style={{
+                            width: 32, height: 32, borderRadius: '50%',
+                            background: 'linear-gradient(135deg,#818cf8,#06b6d4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#fff', fontWeight: 700, fontSize: '0.75rem'
+                          }}>
+                            {u.firstName?.[0]}{u.lastName?.[0]}
+                          </div>
+                          <span className="fw-semibold">{u.firstName} {u.lastName}</span>
+                        </div>
+                      </td>
+                      <td className="text-muted">{u.email}</td>
+                      <td>
+                        {u.roles?.map((r) => (
+                          <span key={r} className="badge bg-light text-dark me-1" style={{ fontSize: '0.72rem' }}>
+                            {r.replace('ROLE_', '')}
+                          </span>
+                        ))}
+                      </td>
+                      <td>
+                        <StatusBadge status={u.active ? 'ACTIVE' : 'INACTIVE'} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default AdminUsers
+
+
+
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { authAPI } from "../../api/services";
+
+const Login = () => {
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const { data } = await authAPI.login(form);
+      login(data);
+      if (data.roles?.includes("ROLE_ADMIN")) navigate("/admin/dashboard");
+      else if (data.roles?.includes("ROLE_TRAINER"))
+        navigate("/trainer/dashboard");
+      else navigate("/user/dashboard");
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Invalid credentials. Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-wrapper">
+      <div className="auth-card">
+        <div className="auth-logo">
+          <i className="bi bi-mortarboard-fill" />
+        </div>
+        <h4 className="text-center fw-bold mb-1">Welcome Back</h4>
+        <p
+          className="text-center text-muted mb-4"
+          style={{ fontSize: "0.88rem" }}
+        >
+          Sign in to your account
+        </p>
+
+        {error && (
+          <div className="alert alert-danger d-flex align-items-center gap-2">
+            <i className="bi bi-exclamation-triangle" />
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label
+              className="form-label fw-semibold"
+              style={{ fontSize: "0.88rem" }}
+            >
+              Email Address
+            </label>
+            <div className="input-group">
+              <span className="input-group-text bg-light border-end-0">
+                <i className="bi bi-envelope text-muted" />
+              </span>
+              <input
+                type="email"
+                name="email"
+                className="form-control border-start-0"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label
+              className="form-label fw-semibold"
+              style={{ fontSize: "0.88rem" }}
+            >
+              Password
+            </label>
+            <div className="input-group">
+              <span className="input-group-text bg-light border-end-0">
+                <i className="bi bi-lock text-muted" />
+              </span>
+              <input
+                type="password"
+                name="password"
+                className="form-control border-start-0"
+                placeholder="••••••••"
+                value={form.password}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary-custom w-100"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
+          </button>
+        </form>
+
+        <p className="text-center mt-4 mb-0" style={{ fontSize: "0.88rem" }}>
+          Don&apos;t have an account?{" "}
+          <Link
+            to="/register"
+            className="text-decoration-none fw-semibold"
+            style={{ color: "#4f46e5" }}
+          >
+            Register here
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
+
+
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { authAPI } from '../../api/services'
+
+const Register = () => {
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' })
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    if (form.password.length < 8 || form.password.length > 16) {
+      setError('Password must be 8–16 characters.')
+      return
+    }
+    setLoading(true)
+    try {
+      await authAPI.register(form)
+      setSuccess('Registration successful! Redirecting to login...')
+      setTimeout(() => navigate('/login'), 1800)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Registration failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="auth-wrapper">
+      <div className="auth-card">
+        <div className="auth-logo">
+          <i className="bi bi-person-plus-fill" />
+        </div>
+        <h4 className="text-center fw-bold mb-1">Create Account</h4>
+        <p className="text-center text-muted mb-4" style={{ fontSize: '0.88rem' }}>
+          Join the platform today
+        </p>
+
+        {error && <div className="alert alert-danger">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="row g-3 mb-3">
+            <div className="col-6">
+              <label className="form-label fw-semibold" style={{ fontSize: '0.88rem' }}>First Name</label>
+              <input type="text" name="firstName" className="form-control" placeholder="John" value={form.firstName} onChange={handleChange} required />
+            </div>
+            <div className="col-6">
+              <label className="form-label fw-semibold" style={{ fontSize: '0.88rem' }}>Last Name</label>
+              <input type="text" name="lastName" className="form-control" placeholder="Doe" value={form.lastName} onChange={handleChange} required />
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <label className="form-label fw-semibold" style={{ fontSize: '0.88rem' }}>Email Address</label>
+            <input type="email" name="email" className="form-control" placeholder="you@example.com" value={form.email} onChange={handleChange} required />
+          </div>
+
+          <div className="mb-4">
+            <label className="form-label fw-semibold" style={{ fontSize: '0.88rem' }}>Password <span className="text-muted fw-normal">(8–16 chars)</span></label>
+            <input type="password" name="password" className="form-control" placeholder="••••••••" value={form.password} onChange={handleChange} required />
+          </div>
+
+          <button type="submit" className="btn btn-primary-custom w-100" disabled={loading}>
+            {loading ? <><span className="spinner-border spinner-border-sm me-2" />Registering...</> : 'Create Account'}
+          </button>
+        </form>
+
+        <p className="text-center mt-4 mb-0" style={{ fontSize: '0.88rem' }}>
+          Already have an account?{' '}
+          <Link to="/login" className="text-decoration-none fw-semibold" style={{ color: '#4f46e5' }}>Sign in</Link>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+export default Register
+
+
+import { useEffect, useState } from "react";
+import Layout from "../../components/common/Layout";
+import { courseAPI, userAPI } from "../../api/services";
+import { Spinner, Alert, StarRating } from "../../components/common/UI";
+
+const TrainerBrowse = () => {
+  const [courses, setCourses] = useState([]);
+  const [keyword, setKeyword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ type: "", text: "" });
+
+  // Enroll modal state
+  const [enrollModal, setEnrollModal] = useState(null);
+  const [enrollMessage, setEnrollMessage] = useState("");
+  const [enrolling, setEnrolling] = useState(false);
+
+  // Feedback modal state
+  const [fbModal, setFbModal] = useState(null);
+  const [fbForm, setFbForm] = useState({ rating: 5, comment: "" });
+  const [submittingFb, setSubmittingFb] = useState(false);
+
+  const search = (kw = keyword) => {
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+    courseAPI
+      .search(kw)
+      .then(({ data }) => setCourses(data))
+      .catch(() =>
+        setMessage({ type: "danger", text: "Failed to load courses." }),
+      )
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    search("");
+  }, []);
+
+  const handleEnroll = async () => {
+    setEnrolling(true);
+    try {
+      await userAPI.sendCourseRequest({
+        courseId: enrollModal.id,
+        message: enrollMessage,
+      });
+      setMessage({
+        type: "success",
+        text: `Enrollment request sent for "${enrollModal.title}"!`,
+      });
+      setEnrollModal(null);
+      setEnrollMessage("");
+    } catch (err) {
+      setMessage({
+        type: "danger",
+        text: err.response?.data?.message || "Enrollment failed.",
+      });
+    } finally {
+      setEnrolling(false);
+    }
+  };
+
+  const handleFeedback = async () => {
+    setSubmittingFb(true);
+    try {
+      await userAPI.submitFeedback({ courseId: fbModal.id, ...fbForm });
+      setMessage({ type: "success", text: "Feedback submitted!" });
+      setFbModal(null);
+      setFbForm({ rating: 5, comment: "" });
+    } catch (err) {
+      setMessage({
+        type: "danger",
+        text: err.response?.data?.message || "Failed to submit feedback.",
+      });
+    } finally {
+      setSubmittingFb(false);
+    }
+  };
+
+  return (
+    <Layout title="Browse Courses">
+      <Alert type={message.type} message={message.text} />
+
+      {/* Search bar */}
+      <div className="card border-0 shadow-sm p-3 mb-4">
+        <div className="input-group">
+          <span className="input-group-text bg-white border-end-0">
+            <i className="bi bi-search text-muted" />
+          </span>
+          <input
+            className="form-control border-start-0 border-end-0"
+            placeholder="Search by title or category..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+          />
+          <button
+            className="btn btn-primary-custom px-4"
+            onClick={() => search()}
+          >
+            Search
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <Spinner />
+      ) : (
+        <div className="row g-3">
+          {courses.length === 0 ? (
+            <div className="col-12 text-center py-5 text-muted">
+              <i className="bi bi-search display-5 d-block mb-3" />
+              No courses found. Try a different keyword.
+            </div>
+          ) : (
+            courses.map((c) => (
+              <div className="col-md-6 col-xl-4" key={c.id}>
+                <div
+                  className="card h-100 border-0 shadow-sm"
+                  style={{ borderRadius: "1rem", overflow: "hidden" }}
+                >
+                  <div
+                    style={{
+                      height: 6,
+                      background: "linear-gradient(90deg,#4f46e5,#06b6d4)",
+                    }}
+                  />
+                  <div className="card-body p-4">
+                    <div className="d-flex justify-content-between align-items-start mb-2">
+                      <span
+                        className="badge bg-light text-dark"
+                        style={{ fontSize: "0.72rem" }}
+                      >
+                        {c.category || "General"}
+                      </span>
+                      <span className="fw-bold text-success">
+                        {c.price ? `₹${c.price}` : "Free"}
+                      </span>
+                    </div>
+                    <h6 className="fw-bold mb-1">{c.title}</h6>
+                    <p
+                      className="text-muted mb-3"
+                      style={{ fontSize: "0.82rem" }}
+                    >
+                      {c.description?.substring(0, 90) ||
+                        "No description available."}
+                      {c.description?.length > 90 ? "..." : ""}
+                    </p>
+                    <div
+                      className="text-muted mb-3"
+                      style={{ fontSize: "0.78rem" }}
+                    >
+                      <i className="bi bi-person me-1" />
+                      {c.trainerName || "Trainer"}
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button
+                        className="btn btn-primary-custom btn-sm flex-grow-1"
+                        onClick={() => setEnrollModal(c)}
+                      >
+                        <i className="bi bi-send me-1" />
+                        Request Enroll
+                      </button>
+                      <button
+                        className="btn btn-outline-secondary btn-sm"
+                        onClick={() => setFbModal(c)}
+                        title="Give Feedback"
+                      >
+                        <i className="bi bi-star" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Enroll Modal */}
+      {enrollModal && (
+        <div
+          className="modal d-block"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header border-0">
+                <h5 className="modal-title fw-bold">Request Enrollment</h5>
+                <button
+                  className="btn-close"
+                  onClick={() => setEnrollModal(null)}
+                />
+              </div>
+              <div className="modal-body">
+                <p className="text-muted">
+                  You&apos;re requesting to enroll in{" "}
+                  <strong>{enrollModal.title}</strong>.
+                </p>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    Message to Trainer (optional)
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder="Tell the trainer why you want to join..."
+                    value={enrollMessage}
+                    onChange={(e) => setEnrollMessage(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button
+                  className="btn btn-light"
+                  onClick={() => setEnrollModal(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary-custom"
+                  onClick={handleEnroll}
+                  disabled={enrolling}
+                >
+                  {enrolling ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Request"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {fbModal && (
+        <div
+          className="modal d-block"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header border-0">
+                <h5 className="modal-title fw-bold">Submit Feedback</h5>
+                <button
+                  className="btn-close"
+                  onClick={() => setFbModal(null)}
+                />
+              </div>
+              <div className="modal-body">
+                <p className="text-muted">
+                  Feedback for <strong>{fbModal.title}</strong>
+                </p>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Rating</label>
+                  <div className="d-flex gap-2">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        className="btn btn-sm p-1"
+                        onClick={() => setFbForm({ ...fbForm, rating: s })}
+                        style={{
+                          fontSize: "1.4rem",
+                          background: "none",
+                          border: "none",
+                        }}
+                      >
+                        <i
+                          className={`bi bi-star${s <= fbForm.rating ? "-fill" : ""} rating-star`}
+                        />
+                      </button>
+                    ))}
+                    <span className="ms-2 align-self-center text-muted">
+                      {fbForm.rating}/5
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="form-label fw-semibold">
+                    Comment <span className="text-danger">*</span>
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder="Share your experience..."
+                    value={fbForm.comment}
+                    onChange={(e) =>
+                      setFbForm({ ...fbForm, comment: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button
+                  className="btn btn-light"
+                  onClick={() => setFbModal(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary-custom"
+                  onClick={handleFeedback}
+                  disabled={submittingFb || !fbForm.comment.trim()}
+                >
+                  {submittingFb ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Feedback"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+};
+
+export default TrainerBrowse;
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { trainerAPI } from '../../api/services'
+import { Spinner, Alert, StatusBadge } from '../../components/common/UI'
+
+const emptyForm = { title: '', description: '', category: '', price: '', status: 'ACTIVE' }
+
+const TrainerCourses = () => {
+  const [courses, setCourses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState(emptyForm)
+  const [editId, setEditId] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
+  const [showModal, setShowModal] = useState(false)
+
+  const fetchCourses = () => {
+    setLoading(true)
+    trainerAPI.getMyCourses()
+      .then(({ data }) => setCourses(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchCourses() }, [])
+
+  const openCreate = () => { setForm(emptyForm); setEditId(null); setShowModal(true) }
+  const openEdit = (c) => {
+    setForm({ title: c.title, description: c.description || '', category: c.category || '', price: c.price || '', status: c.status || 'ACTIVE' })
+    setEditId(c.id)
+    setShowModal(true)
+  }
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { setMessage({ type: 'danger', text: 'Title is required.' }); return }
+    setSaving(true)
+    setMessage({ type: '', text: '' })
+    try {
+      if (editId) await trainerAPI.updateCourse(editId, form)
+      else await trainerAPI.createCourse(form)
+      setMessage({ type: 'success', text: `Course ${editId ? 'updated' : 'created'} successfully!` })
+      setShowModal(false)
+      fetchCourses()
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Failed to save course.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Layout title="My Courses">
+      <Alert type={message.type} message={message.text} />
+
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <span className="text-muted">{courses.length} course(s)</span>
+        <button className="btn btn-primary-custom" onClick={openCreate}>
+          <i className="bi bi-plus-lg me-2" />New Course
+        </button>
+      </div>
+
+      <div className="card table-card">
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr><th>Title</th><th>Category</th><th>Price</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {courses.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-muted py-5">
+                      <i className="bi bi-collection display-6 d-block mb-2 text-muted" />
+                      No courses yet. Create your first course!
+                    </td></tr>
+                  ) : courses.map((c) => (
+                    <tr key={c.id}>
+                      <td>
+                        <div className="fw-semibold">{c.title}</div>
+                        <div className="text-muted" style={{ fontSize: '0.78rem' }}>{c.description?.substring(0, 50)}...</div>
+                      </td>
+                      <td><span className="badge bg-light text-dark">{c.category || '—'}</span></td>
+                      <td className="text-success fw-semibold">{c.price ? `₹${c.price}` : 'Free'}</td>
+                      <td><StatusBadge status={c.status || 'ACTIVE'} /></td>
+                      <td>
+                        <button className="btn btn-sm btn-outline-primary" onClick={() => openEdit(c)}>
+                          <i className="bi bi-pencil" /> Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="modal d-block" style={{ background: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header border-0">
+                <h5 className="modal-title fw-bold">{editId ? 'Edit Course' : 'Create New Course'}</h5>
+                <button className="btn-close" onClick={() => setShowModal(false)} />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Title <span className="text-danger">*</span></label>
+                  <input name="title" className="form-control" value={form.title} onChange={handleChange} placeholder="e.g. React for Beginners" />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Description</label>
+                  <textarea name="description" className="form-control" rows={3} value={form.description} onChange={handleChange} placeholder="Course description..." />
+                </div>
+                <div className="row g-3">
+                  <div className="col-6">
+                    <label className="form-label fw-semibold">Category</label>
+                    <input name="category" className="form-control" value={form.category} onChange={handleChange} placeholder="e.g. Web Development" />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label fw-semibold">Price (₹)</label>
+                    <input name="price" type="number" min="0" className="form-control" value={form.price} onChange={handleChange} placeholder="0 for free" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="form-label fw-semibold">Status</label>
+                  <select name="status" className="form-select" value={form.status} onChange={handleChange}>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button className="btn btn-light" onClick={() => setShowModal(false)}>Cancel</button>
+                <button className="btn btn-primary-custom" onClick={handleSave} disabled={saving}>
+                  {saving ? <><span className="spinner-border spinner-border-sm me-2" />Saving...</> : 'Save Course'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  )
+}
+
+export default TrainerCourses
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { trainerAPI } from '../../api/services'
+import { Spinner, StatusBadge } from '../../components/common/UI'
+
+const TrainerDashboard = () => {
+  const [courses, setCourses] = useState([])
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([trainerAPI.getMyCourses(), trainerAPI.getCourseRequests()])
+      .then(([c, r]) => { setCourses(c.data); setRequests(r.data) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const pendingRequests = requests.filter((r) => r.status === 'PENDING')
+
+  return (
+    <Layout title="Trainer Dashboard">
+      {loading ? <Spinner /> : (
+        <>
+          <div className="row g-3 mb-4">
+            {[
+              { label: 'My Courses', value: courses.length, icon: 'bi-collection-fill', color: '#4f46e5' },
+              { label: 'Pending Requests', value: pendingRequests.length, icon: 'bi-inbox-fill', color: '#f59e0b' },
+              { label: 'Total Requests', value: requests.length, icon: 'bi-send-fill', color: '#06b6d4' },
+            ].map((s) => (
+              <div className="col-sm-4" key={s.label}>
+                <div className="card stat-card p-3">
+                  <div className="d-flex align-items-center gap-3">
+                    <div className="stat-icon" style={{ background: `${s.color}20`, color: s.color }}>
+                      <i className={`bi ${s.icon}`} />
+                    </div>
+                    <div>
+                      <div className="text-muted" style={{ fontSize: '0.8rem' }}>{s.label}</div>
+                      <div className="fw-bold fs-4">{s.value}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="row g-4">
+            <div className="col-lg-7">
+              <div className="card table-card">
+                <div className="card-header bg-white border-0 pt-3">
+                  <h6 className="fw-bold mb-0">My Courses</h6>
+                </div>
+                <div className="card-body p-0">
+                  <table className="table table-hover mb-0">
+                    <thead>
+                      <tr><th>Title</th><th>Category</th><th>Price</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                      {courses.length === 0 ? (
+                        <tr><td colSpan={4} className="text-center text-muted py-3">No courses yet.</td></tr>
+                      ) : courses.slice(0, 5).map((c) => (
+                        <tr key={c.id}>
+                          <td className="fw-semibold">{c.title}</td>
+                          <td><span className="badge bg-light text-dark">{c.category || '—'}</span></td>
+                          <td className="text-success">{c.price ? `₹${c.price}` : 'Free'}</td>
+                          <td><StatusBadge status={c.status || 'ACTIVE'} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-5">
+              <div className="card table-card">
+                <div className="card-header bg-white border-0 pt-3">
+                  <h6 className="fw-bold mb-0">Pending Student Requests</h6>
+                </div>
+                <div className="card-body p-0">
+                  <table className="table mb-0">
+                    <thead><tr><th>Student</th><th>Course</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {pendingRequests.length === 0 ? (
+                        <tr><td colSpan={3} className="text-center text-muted py-3">No pending requests.</td></tr>
+                      ) : pendingRequests.slice(0, 5).map((r) => (
+                        <tr key={r.id}>
+                          <td style={{ fontSize: '0.85rem' }}>{r.userName || r.userEmail || '—'}</td>
+                          <td style={{ fontSize: '0.85rem' }}>{r.courseTitle || '—'}</td>
+                          <td><StatusBadge status={r.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </Layout>
+  )
+}
+
+export default TrainerDashboard
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { trainerAPI } from '../../api/services'
+import { Spinner, Alert, StatusBadge } from '../../components/common/UI'
+
+const TrainerRequests = () => {
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState({ type: '', text: '' })
+  const [actionLoading, setActionLoading] = useState(null)
+  const [filter, setFilter] = useState('ALL')
+
+  const fetchRequests = () => {
+    setLoading(true)
+    trainerAPI.getCourseRequests()
+      .then(({ data }) => setRequests(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchRequests() }, [])
+
+  const decide = async (id, accepted) => {
+    setActionLoading(id)
+    try {
+      await trainerAPI.decideCourseRequest(id, { accepted })
+      setMessage({ type: 'success', text: `Request ${accepted ? 'accepted' : 'declined'}.` })
+      fetchRequests()
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Action failed.' })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const filtered = filter === 'ALL' ? requests : requests.filter((r) => r.status === filter)
+
+  return (
+    <Layout title="Course Enrollment Requests">
+      <Alert type={message.type} message={message.text} />
+
+      <div className="d-flex gap-2 mb-3">
+        {['ALL', 'PENDING', 'ACCEPTED', 'DECLINED'].map((f) => (
+          <button key={f} className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setFilter(f)}>
+            {f} {f !== 'ALL' && <span className="badge bg-white text-dark ms-1">{requests.filter(r => r.status === f).length}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="card table-card">
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr><th>Student</th><th>Course</th><th>Message</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center text-muted py-4">No requests found.</td></tr>
+                  ) : filtered.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <div className="fw-semibold">{r.userName || '—'}</div>
+                        <div className="text-muted" style={{ fontSize: '0.78rem' }}>{r.userEmail}</div>
+                      </td>
+                      <td className="fw-semibold text-primary">{r.courseTitle || '—'}</td>
+                      <td>
+                        <span className="text-muted" style={{ fontSize: '0.83rem' }}>{r.message || 'No message'}</span>
+                      </td>
+                      <td><StatusBadge status={r.status} /></td>
+                      <td>
+                        {r.status === 'PENDING' ? (
+                          <div className="d-flex gap-2">
+                            <button
+                              className="btn btn-success btn-sm"
+                              disabled={actionLoading === r.id}
+                              onClick={() => decide(r.id, true)}
+                            >
+                              {actionLoading === r.id ? <span className="spinner-border spinner-border-sm" /> : <><i className="bi bi-check-lg" /> Accept</>}
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm"
+                              disabled={actionLoading === r.id}
+                              onClick={() => decide(r.id, false)}
+                            >
+                              <i className="bi bi-x-lg" /> Decline
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-muted" style={{ fontSize: '0.8rem' }}>Decided</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default TrainerRequests
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { trainerAPI } from '../../api/services'
+import { Spinner } from '../../components/common/UI'
+
+const TrainerStudents = () => {
+  const [students, setStudents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    trainerAPI.getStudents()
+      .then(({ data }) => setStudents(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = students.filter((s) =>
+    `${s.firstName} ${s.lastName} ${s.email}`.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <Layout title="My Students">
+      <div className="card table-card">
+        <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
+          <h6 className="fw-bold mb-0">Enrolled Students <span className="text-muted fw-normal">({students.length})</span></h6>
+          <input
+            className="form-control form-control-sm"
+            style={{ width: 220 }}
+            placeholder="Search students..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr><th>#</th><th>Student</th><th>Email</th></tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={3} className="text-center text-muted py-4">No students yet.</td></tr>
+                  ) : filtered.map((s, i) => (
+                    <tr key={s.id || i}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td>
+                        <div className="d-flex align-items-center gap-2">
+                          <div style={{
+                            width: 34, height: 34, borderRadius: '50%',
+                            background: 'linear-gradient(135deg,#818cf8,#06b6d4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#fff', fontWeight: 700, fontSize: '0.75rem'
+                          }}>
+                            {s.firstName?.[0]}{s.lastName?.[0]}
+                          </div>
+                          <span className="fw-semibold">{s.firstName} {s.lastName}</span>
+                        </div>
+                      </td>
+                      <td className="text-muted">{s.email}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default TrainerStudents
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { courseAPI, userAPI } from '../../api/services'
+import { Spinner, Alert, StarRating } from '../../components/common/UI'
+
+const BrowseCourses = () => {
+  const [courses, setCourses] = useState([])
+  const [keyword, setKeyword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
+
+  // Enroll modal state
+  const [enrollModal, setEnrollModal] = useState(null)
+  const [enrollMessage, setEnrollMessage] = useState('')
+  const [enrolling, setEnrolling] = useState(false)
+
+  // Feedback modal state
+  const [fbModal, setFbModal] = useState(null)
+  const [fbForm, setFbForm] = useState({ rating: 5, comment: '' })
+  const [submittingFb, setSubmittingFb] = useState(false)
+
+  const search = (kw = keyword) => {
+    setLoading(true)
+    setMessage({ type: '', text: '' })
+    courseAPI.search(kw)
+      .then(({ data }) => setCourses(data))
+      .catch(() => setMessage({ type: 'danger', text: 'Failed to load courses.' }))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { search('') }, [])
+
+  const handleEnroll = async () => {
+    setEnrolling(true)
+    try {
+      await userAPI.sendCourseRequest({ courseId: enrollModal.id, message: enrollMessage })
+      setMessage({ type: 'success', text: `Enrollment request sent for "${enrollModal.title}"!` })
+      setEnrollModal(null)
+      setEnrollMessage('')
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Enrollment failed.' })
+    } finally {
+      setEnrolling(false)
+    }
+  }
+
+  const handleFeedback = async () => {
+    setSubmittingFb(true)
+    try {
+      await userAPI.submitFeedback({ courseId: fbModal.id, ...fbForm })
+      setMessage({ type: 'success', text: 'Feedback submitted!' })
+      setFbModal(null)
+      setFbForm({ rating: 5, comment: '' })
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Failed to submit feedback.' })
+    } finally {
+      setSubmittingFb(false)
+    }
+  }
+
+  return (
+    <Layout title="Browse Courses">
+      <Alert type={message.type} message={message.text} />
+
+      {/* Search bar */}
+      <div className="card border-0 shadow-sm p-3 mb-4">
+        <div className="input-group">
+          <span className="input-group-text bg-white border-end-0">
+            <i className="bi bi-search text-muted" />
+          </span>
+          <input
+            className="form-control border-start-0 border-end-0"
+            placeholder="Search by title or category..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && search()}
+          />
+          <button className="btn btn-primary-custom px-4" onClick={() => search()}>Search</button>
+        </div>
+      </div>
+
+      {loading ? <Spinner /> : (
+        <div className="row g-3">
+          {courses.length === 0 ? (
+            <div className="col-12 text-center py-5 text-muted">
+              <i className="bi bi-search display-5 d-block mb-3" />
+              No courses found. Try a different keyword.
+            </div>
+          ) : courses.map((c) => (
+            <div className="col-md-6 col-xl-4" key={c.id}>
+              <div className="card h-100 border-0 shadow-sm" style={{ borderRadius: '1rem', overflow: 'hidden' }}>
+                <div style={{ height: 6, background: 'linear-gradient(90deg,#4f46e5,#06b6d4)' }} />
+                <div className="card-body p-4">
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <span className="badge bg-light text-dark" style={{ fontSize: '0.72rem' }}>{c.category || 'General'}</span>
+                    <span className="fw-bold text-success">{c.price ? `₹${c.price}` : 'Free'}</span>
+                  </div>
+                  <h6 className="fw-bold mb-1">{c.title}</h6>
+                  <p className="text-muted mb-3" style={{ fontSize: '0.82rem' }}>
+                    {c.description?.substring(0, 90) || 'No description available.'}
+                    {c.description?.length > 90 ? '...' : ''}
+                  </p>
+                  <div className="text-muted mb-3" style={{ fontSize: '0.78rem' }}>
+                    <i className="bi bi-person me-1" />{c.trainerName || 'Trainer'}
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button className="btn btn-primary-custom btn-sm flex-grow-1" onClick={() => setEnrollModal(c)}>
+                      <i className="bi bi-send me-1" />Request Enroll
+                    </button>
+                    <button className="btn btn-outline-secondary btn-sm" onClick={() => setFbModal(c)} title="Give Feedback">
+                      <i className="bi bi-star" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Enroll Modal */}
+      {enrollModal && (
+        <div className="modal d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header border-0">
+                <h5 className="modal-title fw-bold">Request Enrollment</h5>
+                <button className="btn-close" onClick={() => setEnrollModal(null)} />
+              </div>
+              <div className="modal-body">
+                <p className="text-muted">You&apos;re requesting to enroll in <strong>{enrollModal.title}</strong>.</p>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Message to Trainer (optional)</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder="Tell the trainer why you want to join..."
+                    value={enrollMessage}
+                    onChange={(e) => setEnrollMessage(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button className="btn btn-light" onClick={() => setEnrollModal(null)}>Cancel</button>
+                <button className="btn btn-primary-custom" onClick={handleEnroll} disabled={enrolling}>
+                  {enrolling ? <><span className="spinner-border spinner-border-sm me-2" />Sending...</> : 'Send Request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {fbModal && (
+        <div className="modal d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header border-0">
+                <h5 className="modal-title fw-bold">Submit Feedback</h5>
+                <button className="btn-close" onClick={() => setFbModal(null)} />
+              </div>
+              <div className="modal-body">
+                <p className="text-muted">Feedback for <strong>{fbModal.title}</strong></p>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Rating</label>
+                  <div className="d-flex gap-2">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        className="btn btn-sm p-1"
+                        onClick={() => setFbForm({ ...fbForm, rating: s })}
+                        style={{ fontSize: '1.4rem', background: 'none', border: 'none' }}
+                      >
+                        <i className={`bi bi-star${s <= fbForm.rating ? '-fill' : ''} rating-star`} />
+                      </button>
+                    ))}
+                    <span className="ms-2 align-self-center text-muted">{fbForm.rating}/5</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="form-label fw-semibold">Comment <span className="text-danger">*</span></label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder="Share your experience..."
+                    value={fbForm.comment}
+                    onChange={(e) => setFbForm({ ...fbForm, comment: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button className="btn btn-light" onClick={() => setFbModal(null)}>Cancel</button>
+                <button className="btn btn-primary-custom" onClick={handleFeedback} disabled={submittingFb || !fbForm.comment.trim()}>
+                  {submittingFb ? <><span className="spinner-border spinner-border-sm me-2" />Submitting...</> : 'Submit Feedback'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  )
+}
+
+export default BrowseCourses
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { userAPI } from '../../api/services'
+import { Spinner, StatusBadge } from '../../components/common/UI'
+import { useAuth } from '../../context/AuthContext'
+
+const UserDashboard = () => {
+  const { user } = useAuth()
+  const [enrollments, setEnrollments] = useState([])
+  const [requests, setRequests] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      userAPI.getEnrolledCourses(),
+      userAPI.getMyCourseRequests(),
+      userAPI.getNotifications(),
+    ]).then(([e, r, n]) => {
+      setEnrollments(e.data)
+      setRequests(r.data)
+      setNotifications(n.data)
+    }).catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const unread = notifications.filter((n) => !n.read).length
+
+  return (
+    <Layout title="My Dashboard">
+      {loading ? <Spinner /> : (
+        <>
+          {/* Welcome Banner */}
+          <div className="p-4 rounded-3 mb-4 text-white" style={{ background: 'linear-gradient(135deg,#4f46e5,#06b6d4)' }}>
+            <h5 className="fw-bold mb-1">Welcome back, {user?.firstName}! 👋</h5>
+            <p className="mb-0 opacity-75">Continue your learning journey</p>
+          </div>
+
+          <div className="row g-3 mb-4">
+            {[
+              { label: 'Enrolled Courses', value: enrollments.length, icon: 'bi-journal-check', color: '#4f46e5' },
+              { label: 'My Requests', value: requests.length, icon: 'bi-send', color: '#06b6d4' },
+              { label: 'Unread Alerts', value: unread, icon: 'bi-bell', color: '#f59e0b' },
+            ].map((s) => (
+              <div className="col-sm-4" key={s.label}>
+                <div className="card stat-card p-3">
+                  <div className="d-flex align-items-center gap-3">
+                    <div className="stat-icon" style={{ background: `${s.color}20`, color: s.color }}>
+                      <i className={`bi ${s.icon}`} />
+                    </div>
+                    <div>
+                      <div className="text-muted" style={{ fontSize: '0.8rem' }}>{s.label}</div>
+                      <div className="fw-bold fs-4">{s.value}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="row g-4">
+            <div className="col-lg-7">
+              <div className="card table-card">
+                <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between">
+                  <h6 className="fw-bold mb-0">My Enrollments</h6>
+                  <a href="/user/enrollments" className="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div className="card-body p-0">
+                  <table className="table mb-0">
+                    <thead><tr><th>Course</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {enrollments.length === 0 ? (
+                        <tr><td colSpan={2} className="text-center text-muted py-3">No enrollments yet. <a href="/user/courses">Browse courses</a></td></tr>
+                      ) : enrollments.slice(0, 5).map((e) => (
+                        <tr key={e.id}>
+                          <td className="fw-semibold">{e.courseTitle || '—'}</td>
+                          <td><StatusBadge status={e.status || 'ACTIVE'} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-5">
+              <div className="card table-card">
+                <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between">
+                  <h6 className="fw-bold mb-0">Recent Notifications</h6>
+                  <a href="/user/notifications" className="btn btn-sm btn-outline-secondary">View All</a>
+                </div>
+                <ul className="list-group list-group-flush">
+                  {notifications.length === 0 ? (
+                    <li className="list-group-item text-center text-muted">No notifications.</li>
+                  ) : notifications.slice(0, 5).map((n) => (
+                    <li key={n.id} className={`list-group-item ${!n.read ? 'bg-light' : ''}`} style={{ fontSize: '0.85rem' }}>
+                      <div className="d-flex align-items-start gap-2">
+                        {!n.read && <span className="notification-dot mt-1 flex-shrink-0" />}
+                        <span>{n.message}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </Layout>
+  )
+}
+
+export default UserDashboard
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { userAPI } from '../../api/services'
+import { Spinner, StatusBadge } from '../../components/common/UI'
+
+const UserEnrollments = () => {
+  const [enrollments, setEnrollments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    userAPI.getEnrolledCourses()
+      .then(({ data }) => setEnrollments(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Layout title="My Enrollments">
+      <div className="card table-card">
+        <div className="card-header bg-white border-0 pt-3">
+          <h6 className="fw-bold mb-0">Enrolled Courses <span className="text-muted fw-normal">({enrollments.length})</span></h6>
+        </div>
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr><th>#</th><th>Course</th><th>Trainer</th><th>Enrolled On</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {enrollments.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-5 text-muted">
+                        <i className="bi bi-journal-x display-6 d-block mb-2" />
+                        No enrollments yet. <a href="/user/courses" className="text-decoration-none">Browse courses</a> to get started!
+                      </td>
+                    </tr>
+                  ) : enrollments.map((e, i) => (
+                    <tr key={e.id}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td>
+                        <div className="fw-semibold">{e.courseTitle || '—'}</div>
+                        <div className="text-muted" style={{ fontSize: '0.78rem' }}>{e.courseCategory || ''}</div>
+                      </td>
+                      <td className="text-muted">{e.trainerName || '—'}</td>
+                      <td className="text-muted" style={{ fontSize: '0.83rem' }}>
+                        {e.enrolledAt ? new Date(e.enrolledAt).toLocaleDateString() : '—'}
+                      </td>
+                      <td><StatusBadge status={e.status || 'ACTIVE'} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default UserEnrollments
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { userAPI } from '../../api/services'
+import { Spinner, Alert } from '../../components/common/UI'
+
+const UserNotifications = () => {
+  const [notifications, setNotifications] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState({ type: '', text: '' })
+  const [marking, setMarking] = useState(false)
+
+  const fetchNotifications = () => {
+    setLoading(true)
+    userAPI.getNotifications()
+      .then(({ data }) => setNotifications(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchNotifications() }, [])
+
+  const markRead = async (id) => {
+    try {
+      await userAPI.markNotificationRead(id)
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
+    } catch { /* ignore */ }
+  }
+
+  const markAll = async () => {
+    setMarking(true)
+    try {
+      await userAPI.markAllRead()
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      setMessage({ type: 'success', text: 'All notifications marked as read.' })
+    } catch {
+      setMessage({ type: 'danger', text: 'Failed to mark all as read.' })
+    } finally {
+      setMarking(false)
+    }
+  }
+
+  const unreadCount = notifications.filter((n) => !n.read).length
+
+  return (
+    <Layout title="Notifications">
+      <Alert type={message.type} message={message.text} />
+
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <span className="text-muted">{unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}</span>
+        {unreadCount > 0 && (
+          <button className="btn btn-sm btn-outline-primary" onClick={markAll} disabled={marking}>
+            {marking ? <span className="spinner-border spinner-border-sm me-1" /> : <i className="bi bi-check-all me-1" />}
+            Mark All Read
+          </button>
+        )}
+      </div>
+
+      <div className="card table-card">
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : notifications.length === 0 ? (
+            <div className="text-center py-5 text-muted">
+              <i className="bi bi-bell-slash display-5 d-block mb-2" />
+              No notifications yet.
+            </div>
+          ) : (
+            <ul className="list-group list-group-flush">
+              {notifications.map((n) => (
+                <li
+                  key={n.id}
+                  className={`list-group-item d-flex align-items-start gap-3 py-3 ${!n.read ? 'bg-light' : ''}`}
+                >
+                  <div className="flex-shrink-0 mt-1">
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: n.read ? '#cbd5e1' : '#4f46e5',
+                      marginTop: 5
+                    }} />
+                  </div>
+                  <div className="flex-grow-1">
+                    <div style={{ fontSize: '0.88rem' }}>{n.message}</div>
+                    {n.createdAt && (
+                      <div className="text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                        <i className="bi bi-clock me-1" />
+                        {new Date(n.createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                  {!n.read && (
+                    <button className="btn btn-sm btn-outline-secondary flex-shrink-0" onClick={() => markRead(n.id)}>
+                      Mark Read
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default UserNotifications
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { userAPI } from '../../api/services'
+import { Spinner, Alert } from '../../components/common/UI'
+import { useAuth } from '../../context/AuthContext'
+
+const UserProfile = () => {
+  const { user: authUser } = useAuth()
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({ firstName: '', lastName: '' })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
+
+  // Trainer upgrade
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const [upgradeForm, setUpgradeForm] = useState({ bio: '', specialization: '' })
+  const [certificate, setCertificate] = useState(null)
+  const [upgrading, setUpgrading] = useState(false)
+
+  useEffect(() => {
+    userAPI.getProfile()
+      .then(({ data }) => {
+        setProfile(data)
+        setForm({ firstName: data.firstName, lastName: data.lastName })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleUpdate = async () => {
+    setSaving(true)
+    setMessage({ type: '', text: '' })
+    try {
+      const { data } = await userAPI.updateProfile(form)
+      setProfile(data)
+      setEditing(false)
+      setMessage({ type: 'success', text: 'Profile updated successfully!' })
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Update failed.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpgrade = async () => {
+    if (!certificate) { setMessage({ type: 'danger', text: 'Certificate file is required.' }); return }
+    setUpgrading(true)
+    setMessage({ type: '', text: '' })
+    try {
+      const fd = new FormData()
+      fd.append('data', new Blob([JSON.stringify(upgradeForm)], { type: 'application/json' }))
+      fd.append('certificate', certificate)
+      await userAPI.requestTrainerUpgrade(fd)
+      setMessage({ type: 'success', text: 'Trainer upgrade request submitted! Awaiting admin review.' })
+      setShowUpgrade(false)
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.message || 'Request failed.' })
+    } finally {
+      setUpgrading(false)
+    }
+  }
+
+  const isTrainer = authUser?.roles?.includes('ROLE_TRAINER')
+
+  return (
+    <Layout title="My Profile">
+      {loading ? <Spinner /> : (
+        <>
+          <Alert type={message.type} message={message.text} />
+          <div className="row g-4">
+            <div className="col-lg-4">
+              <div className="card border-0 shadow-sm text-center p-4" style={{ borderRadius: '1rem' }}>
+                <div style={{
+                  width: 80, height: 80, borderRadius: '50%', margin: '0 auto 1rem',
+                  background: 'linear-gradient(135deg,#4f46e5,#06b6d4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '2rem', color: '#fff', fontWeight: 700
+                }}>
+                  {profile?.firstName?.[0]}{profile?.lastName?.[0]}
+                </div>
+                <h5 className="fw-bold mb-1">{profile?.firstName} {profile?.lastName}</h5>
+                <div className="text-muted mb-3" style={{ fontSize: '0.85rem' }}>{profile?.email}</div>
+                <div className="d-flex flex-wrap gap-1 justify-content-center">
+                  {authUser?.roles?.map((r) => (
+                    <span key={r} className="badge rounded-pill px-3" style={{ background: '#ede9fe', color: '#5b21b6', fontSize: '0.75rem' }}>
+                      {r.replace('ROLE_', '')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-8">
+              <div className="card border-0 shadow-sm p-4" style={{ borderRadius: '1rem' }}>
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h6 className="fw-bold mb-0">Personal Information</h6>
+                  {!editing && (
+                    <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}>
+                      <i className="bi bi-pencil me-1" />Edit
+                    </button>
+                  )}
+                </div>
+
+                {editing ? (
+                  <>
+                    <div className="row g-3 mb-3">
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">First Name</label>
+                        <input className="form-control" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Last Name</label>
+                        <input className="form-control" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
+                      </div>
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button className="btn btn-primary-custom btn-sm" onClick={handleUpdate} disabled={saving}>
+                        {saving ? <><span className="spinner-border spinner-border-sm me-2" />Saving...</> : 'Save Changes'}
+                      </button>
+                      <button className="btn btn-light btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="row g-3">
+                    {[
+                      { label: 'First Name', value: profile?.firstName },
+                      { label: 'Last Name', value: profile?.lastName },
+                      { label: 'Email', value: profile?.email },
+                    ].map(({ label, value }) => (
+                      <div className="col-md-6" key={label}>
+                        <div className="text-muted" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                        <div className="fw-semibold">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Trainer Upgrade section */}
+              {!isTrainer && (
+                <div className="card border-0 shadow-sm p-4 mt-3" style={{ borderRadius: '1rem' }}>
+                  <h6 className="fw-bold mb-1">Become a Trainer</h6>
+                  <p className="text-muted mb-3" style={{ fontSize: '0.85rem' }}>
+                    Submit your specialization and certificate to apply for a trainer role. Admin will review your request.
+                  </p>
+                  <button className="btn btn-outline-primary btn-sm" onClick={() => setShowUpgrade(true)}>
+                    <i className="bi bi-mortarboard me-2" />Apply for Trainer Role
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Trainer Upgrade Modal */}
+          {showUpgrade && (
+            <div className="modal d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>
+              <div className="modal-dialog modal-dialog-centered">
+                <div className="modal-content border-0 shadow">
+                  <div className="modal-header border-0">
+                    <h5 className="modal-title fw-bold">Request Trainer Upgrade</h5>
+                    <button className="btn-close" onClick={() => setShowUpgrade(false)} />
+                  </div>
+                  <div className="modal-body">
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Specialization</label>
+                      <input className="form-control" placeholder="e.g. Machine Learning, Web Development" value={upgradeForm.specialization} onChange={(e) => setUpgradeForm({ ...upgradeForm, specialization: e.target.value })} />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Bio</label>
+                      <textarea className="form-control" rows={3} placeholder="Tell us about your teaching experience..." value={upgradeForm.bio} onChange={(e) => setUpgradeForm({ ...upgradeForm, bio: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="form-label fw-semibold">Certificate <span className="text-danger">*</span></label>
+                      <input type="file" className="form-control" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setCertificate(e.target.files[0])} />
+                      <div className="form-text">PDF, JPG, or PNG. Max 5MB.</div>
+                    </div>
+                  </div>
+                  <div className="modal-footer border-0">
+                    <button className="btn btn-light" onClick={() => setShowUpgrade(false)}>Cancel</button>
+                    <button className="btn btn-primary-custom" onClick={handleUpgrade} disabled={upgrading}>
+                      {upgrading ? <><span className="spinner-border spinner-border-sm me-2" />Submitting...</> : 'Submit Request'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Layout>
+  )
+}
+
+export default UserProfile
+
+
+import { useEffect, useState } from 'react'
+import Layout from '../../components/common/Layout'
+import { userAPI } from '../../api/services'
+import { Spinner, StatusBadge } from '../../components/common/UI'
+
+const UserRequests = () => {
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('ALL')
+
+  useEffect(() => {
+    userAPI.getMyCourseRequests()
+      .then(({ data }) => setRequests(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = filter === 'ALL' ? requests : requests.filter((r) => r.status === filter)
+
+  return (
+    <Layout title="My Course Requests">
+      <div className="d-flex gap-2 mb-3">
+        {['ALL', 'PENDING', 'ACCEPTED', 'DECLINED'].map((f) => (
+          <button key={f} className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setFilter(f)}>
+            {f}
+            <span className="badge bg-white text-dark ms-1">
+              {f === 'ALL' ? requests.length : requests.filter(r => r.status === f).length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="card table-card">
+        <div className="card-body p-0">
+          {loading ? <Spinner /> : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead>
+                  <tr><th>#</th><th>Course</th><th>Trainer</th><th>Message Sent</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center text-muted py-4">
+                        No requests found. <a href="/user/courses">Browse courses</a> to send a request.
+                      </td>
+                    </tr>
+                  ) : filtered.map((r, i) => (
+                    <tr key={r.id}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td className="fw-semibold">{r.courseTitle || '—'}</td>
+                      <td className="text-muted">{r.trainerName || '—'}</td>
+                      <td className="text-muted" style={{ fontSize: '0.82rem' }}>{r.message || '—'}</td>
+                      <td><StatusBadge status={r.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default UserRequests
+
+
+import { useNavigate } from 'react-router-dom'
+
+const Unauthorized = () => {
+  const navigate = useNavigate()
+  return (
+    <div className="auth-wrapper">
+      <div className="text-center text-white">
+        <div style={{ fontSize: '5rem' }}>🔒</div>
+        <h2 className="fw-bold mt-3">Access Denied</h2>
+        <p className="opacity-75">You don&apos;t have permission to view this page.</p>
+        <button className="btn btn-light px-4 mt-2" onClick={() => navigate(-1)}>Go Back</button>
+      </div>
+    </div>
+  )
+}
+
+export default Unauthorized
+
+
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/common/ProtectedRoute";
+
+// Auth
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
+
+// Admin
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminCourses from "./pages/admin/AdminCourses";
+import AdminTrainerRequests from "./pages/admin/AdminTrainerRequests";
+import AdminFeedback from "./pages/admin/AdminFeedback";
+import AdminReports from "./pages/admin/AdminReports";
+
+// Trainer
+import TrainerDashboard from "./pages/trainer/TrainerDashboard";
+import TrainerCourses from "./pages/trainer/TrainerCourses";
+import TrainerRequests from "./pages/trainer/TrainerRequests";
+import TrainerStudents from "./pages/trainer/TrainerStudents";
+
+// User
+import UserDashboard from "./pages/user/UserDashboard";
+import BrowseCourses from "./pages/user/BrowseCourses";
+import UserEnrollments from "./pages/user/UserEnrollments";
+import UserRequests from "./pages/user/UserRequests";
+import UserNotifications from "./pages/user/UserNotifications";
+import UserProfile from "./pages/user/UserProfile";
+
+// Misc
+import Unauthorized from "./pages/Unauthorized";
+import TrainerBrowse from "./pages/trainer/TrainerBrowse";
+
+const ADMIN = ["ROLE_ADMIN"];
+const TRAINER = ["ROLE_TRAINER", "ROLE_ADMIN"];
+const USER = ["ROLE_USER", "ROLE_TRAINER", "ROLE_ADMIN"];
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
+
+          {/* Admin */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute roles={ADMIN}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute roles={ADMIN}>
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/courses"
+            element={
+              <ProtectedRoute roles={ADMIN}>
+                <AdminCourses />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/trainer-requests"
+            element={
+              <ProtectedRoute roles={ADMIN}>
+                <AdminTrainerRequests />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/feedback"
+            element={
+              <ProtectedRoute roles={ADMIN}>
+                <AdminFeedback />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute roles={ADMIN}>
+                <AdminReports />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Trainer */}
+          <Route
+            path="/trainer/dashboard"
+            element={
+              <ProtectedRoute roles={TRAINER}>
+                <TrainerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trainer/courses"
+            element={
+              <ProtectedRoute roles={TRAINER}>
+                <TrainerCourses />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trainer/requests"
+            element={
+              <ProtectedRoute roles={TRAINER}>
+                <TrainerRequests />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trainer/students"
+            element={
+              <ProtectedRoute roles={TRAINER}>
+                <TrainerStudents />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trainer/Browse"
+            element={
+              <ProtectedRoute roles={TRAINER}>
+                <TrainerBrowse />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* User */}
+          <Route
+            path="/user/dashboard"
+            element={
+              <ProtectedRoute roles={USER}>
+                <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/courses"
+            element={
+              <ProtectedRoute roles={USER}>
+                <BrowseCourses />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/enrollments"
+            element={
+              <ProtectedRoute roles={USER}>
+                <UserEnrollments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/requests"
+            element={
+              <ProtectedRoute roles={USER}>
+                <UserRequests />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/notifications"
+            element={
+              <ProtectedRoute roles={USER}>
+                <UserNotifications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/profile"
+            element={
+              <ProtectedRoute roles={USER}>
+                <UserProfile />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Default redirect */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
+
+export default App;
+
+
+:root {
+  --primary: #4f46e5;
+  --primary-dark: #3730a3;
+  --secondary: #06b6d4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --light-bg: #f8fafc;
+  --sidebar-width: 250px;
+}
+
+body {
+  background-color: var(--light-bg);
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-width);
+  min-height: 100vh;
+  background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-brand {
+  padding: 1.5rem 1.25rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar .nav-link {
+  color: rgba(255,255,255,0.75);
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.5rem;
+  margin: 0.15rem 0.75rem;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+  color: #fff;
+  background: rgba(255,255,255,0.15);
+}
+
+.sidebar .nav-link i {
+  width: 20px;
+  margin-right: 0.6rem;
+}
+
+/* Main content */
+.main-content {
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+}
+
+.topbar {
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.75rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 999;
+}
+
+/* Cards */
+.stat-card {
+  border: none;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.stat-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+}
+
+/* Tables */
+.table-card {
+  border: none;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.table thead th {
+  background: #f1f5f9;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom: none;
+}
+
+/* Auth pages */
+.auth-wrapper {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e1b4b 0%, #4f46e5 50%, #06b6d4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card {
+  background: #fff;
+  border-radius: 1.25rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 440px;
+}
+
+.auth-logo {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #4f46e5, #06b6d4);
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  color: #fff;
+  margin: 0 auto 1.25rem;
+}
+
+/* Badges */
+.badge-pending { background-color: #fef3c7; color: #92400e; }
+.badge-approved { background-color: #d1fae5; color: #065f46; }
+.badge-rejected { background-color: #fee2e2; color: #991b1b; }
+.badge-active { background-color: #dbeafe; color: #1e40af; }
+
+/* Misc */
+.page-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.btn-primary-custom {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border: none;
+  color: #fff;
+  border-radius: 0.6rem;
+  font-weight: 600;
+  padding: 0.55rem 1.25rem;
+  transition: opacity 0.2s;
+}
+
+.btn-primary-custom:hover { opacity: 0.9; color: #fff; }
+
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.rating-star { color: #f59e0b; }
+
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; }
+}
+
+
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import 'bootstrap/dist/css/bootstrap.min.css'
+import 'bootstrap-icons/font/bootstrap-icons.css'
+import 'bootstrap/dist/js/bootstrap.bundle.min.js'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+
+
